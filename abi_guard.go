@@ -15,7 +15,8 @@
 // A2 (length gate) lives here because it must run BEFORE C.GoBytes: C.int is 32-bit
 // signed while size_t is 64-bit unsigned, so a length >= 2^31 truncates to a
 // negative int and GoBytes panics on makeslice -- in the entry point, ahead of any
-// recover installed deeper.
+// recover installed deeper. The ceiling itself is the fleet's 256 MiB (see
+// abiMaxBufferLen), asserted by abi_guard_test.go.
 //
 // WHAT THIS DOES NOT FIX: panics on background goroutines. This tree starts them
 // only through goroutine_guard.go's safeGo/safeCall, which carry their own recover
@@ -31,13 +32,19 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 )
 
-// abiMaxBufferLen is the largest length that converts to C.int without truncation.
-// 2^31-1 is the mathematical ceiling; nothing legitimate gets near it, so the only
-// behaviour this changes is "would have panicked" -> "returns an error envelope".
-const abiMaxBufferLen = 1<<31 - 1
+// abiMaxBufferLen is the largest request/response this plugin will copy across the
+// ABI boundary.
+//
+// 256 MiB is the fleet口径 (T1 #2283), not an accident: 2^31-1 is only the point
+// where C.int truncates, and a plugin that happily allocates 2 GiB of host
+// memory to answer one call has already lost. Nothing legitimate gets near
+// 256 MiB, so the only behaviour this changes is "would have panicked / would
+// have OOM'd the host" -> "returns an error envelope".
+const abiMaxBufferLen = 256 << 20
 
-// abiRequestLenOK reports whether a length can cross into C.int losslessly.
-// size_t itself is unsigned, so the only real risk is >= 2^31 truncating negative.
+// abiRequestLenOK reports whether a length may cross into C.int losslessly AND
+// stays inside the fleet's 256 MiB ceiling. size_t itself is unsigned, so the
+// hard failure it prevents is >= 2^31 truncating negative.
 func abiRequestLenOK(n uint64) bool { return n <= abiMaxBufferLen }
 
 // abiRequestTooLargeMessage is the envelope body for an over-length request. It

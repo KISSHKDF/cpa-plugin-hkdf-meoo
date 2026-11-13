@@ -36,7 +36,7 @@ func TestVersionShape(t *testing.T) {
 // TestProviderNameIsPluginID pins the id used by routes, config keys and the
 // plugin directory: they must all be the same string.
 func TestProviderNameIsPluginID(t *testing.T) {
-	if providerName != "loomy" {
-		t.Fatalf("providerName=%q; the tree, the config block and every route literal say \"loomy\"", providerName)
+	if providerName != "meoo" {
+		t.Fatalf("providerName=%q; the tree, the config block and every route literal say \"meoo\"", providerName)
 	}
 }

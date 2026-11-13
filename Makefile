@@ -28,7 +28,7 @@ fmt:
 
 check:
 	@if (-not (Test-Path $(GATE))) { @echo GATE not found at $(GATE) - set CPA_OPS to the cpa-plugin-updater directory & exit 1 }
-	$(PS) -NoProfile -ExecutionPolicy Bypass -File $(GATE) -Only loomy
+	$(PS) -NoProfile -ExecutionPolicy Bypass -File $(GATE) -Only meoo
 
 clean:
 	@if (Test-Path build-out) { Remove-Item build-out -Recurse -Force }

@@ -77,11 +77,19 @@ if (!scripts.length) {
 // A script that parses but references a node the HTML never declares still
 // throws at load time, and then every later binding is skipped — the same
 // "dead button" outcome with no syntax error to point at.
+// 2026-11-13 (meoo tree creation): this array used to carry oxion's 18 ids, because
+// the script was copied from that tree. A gate that asserts ANOTHER plugin's markup
+// can only go green by fabricating ids the panel does not have, i.e. it teaches
+// everyone to ignore the gate — the same rot lingxi recorded when it hit this copy,
+// and the reason lingxi wrote its own. Replaced with meoo's real skeleton, derived
+// from panel.html and measured with this very script:
+//   "2 个 <script> 块语法通过，22 个 id，0 个 el() 引用全部命中".
 const requiredIds = [
-  'summary', 'cards', 'models', 'toasts',
-  'btnReload', 'btnEgress', 'btnImport', 'inpKey', 'inpProxy', 'importOut',
-  'btnModelCtl', 'modelCtlCard', 'modelGroupsBox', 'btnModelSave',
-  'btnModelReload', 'btnModelAll', 'btnModelNone', 'modelCtlOut',
+  'summaryBox', 'grid', 'svtime', 'toasts',
+  'authBox', 'keyInput', 'metaHint', 'refreshBtn',
+  'filterBar', 'cntAll', 'cntReadable', 'cntIn', 'cntOut', 'cntStale', 'cntDead', 'autoPoll',
+  'modalMask', 'modalTitle', 'modalBody', 'modalFoot',
+  'addKey', 'addLabel',
 ];
 const declaredIds = new Set();
 for (const m of html.matchAll(/id="([A-Za-z0-9_]+)"/g)) declaredIds.add(m[1]);

@@ -1,4 +1,4 @@
-﻿# build-ng.ps1 — the ONLY sanctioned way to build the oxion plugin dll.
+# build-ng.ps1 — the ONLY sanctioned way to build the meoo plugin dll.
 #
 # Template: the cline tree build script (2026-10-13). This tree had NO
 # build entry point at all — every build was a bare `go build -buildmode=c-shared`,
@@ -40,7 +40,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 } elseif ($Version -ne $versionFile) {
     throw "-Version '$Version' disagrees with VERSION '$versionFile'. Edit VERSION first (no BOM, no trailing space) and retry."
 }
-if ([string]::IsNullOrWhiteSpace($Out)) { $Out = "build-out\oxion-$Version-cshared.dll" }
+if ([string]::IsNullOrWhiteSpace($Out)) { $Out = "build-out\meoo-$Version-cshared.dll" }
 
 # ---- toolchain --------------------------------------------------------------
 $go = 'C:\Users\xbd\tools\go\go\bin\go.exe'
@@ -104,7 +104,7 @@ try {
     & $go vet ./...
     if ($LASTEXITCODE -ne 0) { throw "go vet failed" }
 
-    Write-Host "[4/6] go test -count=1 ./... (excluded_models, redirect guard, refresh singleflight, quota)"
+    Write-Host "[4/6] go test -count=1 ./... (store + credential family, discovery chain, routes/payload, ABI ceiling)"
     & $go test -count=1 -timeout 300s ./...
     if ($LASTEXITCODE -ne 0) { throw "go test failed" }
 
@@ -128,12 +128,12 @@ try {
 #     a-v1.0.0.dll  -> exit 1
 # The linker mis-parses the generated export file when the output name carries
 # two dots (it looks like a version triple and confuses the .def handling).
-# The host-deployed artifacts are named oxion-v0.2.1.dll — also two dots —
+# The host-deployed artifacts are named meoo-v0.2.1.dll — also two dots —
 # which is exactly why they must be produced by renaming, never by -o.
 # This is the same rule the project already follows for cline ("short -o name"),
 # now with the mechanism understood rather than merely remembered.
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'build-out') | Out-Null
-$shortName = "build-out\oxion.dll"
+$shortName = "build-out\meoo.dll"
 $shortPath = Join-Path $root $shortName
 $finalPath = Join-Path $root $Out
 

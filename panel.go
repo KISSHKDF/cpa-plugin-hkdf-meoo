@@ -1,5 +1,5 @@
-// panel.go serves the browser UI that the host renders as the "Oxion"
-// card under CPA's 插件 menu.
+// panel.go serves the browser UI the host renders as the "Meoo 秒悟" card under
+// CPA's 插件 menu.
 //
 // Mechanism (read out of the running host, not assumed): the host has no panel
 // concept at all — internal/pluginhost contains zero references to "panel". A
@@ -8,6 +8,10 @@
 // embeds it in an iframe under /<door>/resource/plugins/<id>/panel, and the page
 // then talks to /<door>/management/plugins/<id>/… with the management key the
 // control panel already keeps in localStorage.
+//
+// (This file was copied from the oxion tree — same single-file embed, same door
+// regex, same raw-HTML response — and had the oxion-only model-catalogue handler
+// removed: Meoo's catalogue lives in management.go/modelsView.)
 package main
 
 import (
@@ -23,7 +27,7 @@ import (
 var panelHTML []byte
 
 // panelMenuLabel is the text CPA shows on the plugin card.
-const panelMenuLabel = "Oxion"
+const panelMenuLabel = "Meoo 秒悟"
 
 // resourceDoorRE accepts whichever door the host injected (v8 keeps /v0 alive and
 // advertises /v8; hardcoding one of them 404s on the other).
@@ -45,10 +49,16 @@ func resourceSubPath(path string) (sub string, ok bool) {
 	return "", false
 }
 
+// loadedResourceBasePath is the browser-facing prefix, with the same safe default
+// the host's own registration uses (the host may never tell us).
 func loadedResourceBasePath() string {
 	resourceBasePathMu.RLock()
-	defer resourceBasePathMu.RUnlock()
-	return strings.TrimRight(resourceBasePathCache, "/")
+	cached := resourceBasePathCache
+	resourceBasePathMu.RUnlock()
+	if cached != "" {
+		return cached
+	}
+	return "/v0/resource/plugins/" + providerName
 }
 
 // servePanel answers the resource route. Anything other than the panel itself is
@@ -63,6 +73,9 @@ func servePanel(sub string) []byte {
 	}
 }
 
+// mgmtHTMLResponse wraps raw HTML in the ONE place the browser looks for the
+// content type. The outer RPC envelope carries this struct; the HTML is the Body,
+// never a JSON document that happens to contain HTML.
 func mgmtHTMLResponse(body []byte) pluginapi.ManagementResponse {
 	headers := http.Header{}
 	headers.Set("Content-Type", "text/html; charset=utf-8")
@@ -76,76 +89,4 @@ func mgmtHTMLResponse(body []byte) pluginapi.ManagementResponse {
 func htmlEscape(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 	return r.Replace(s)
-}
-
-// handlePublishedModels feeds two consumers at once:
-//
-//   - the panel's catalogue strip, which wants a flat `models` list;
-//   - the model enable/disable card, which wants the sibling trees' `groups`
-//     shape (one group per channel, each carrying its model list). Keeping both
-//     in one response means the panel makes one call, and the "disabled" state
-//     it renders can never disagree with the list it just drew.
-//
-// `groups` carries the RAW catalogue (every advertisable id), not the filtered
-// one: the picker has to show a disabled model so it can be re-enabled. The
-// host-side filter is what actually stops routing to it.
-func handlePublishedModels(req pluginapi.ManagementRequest) map[string]any {
-	_ = req
-	sa, _, ok := firstCredential()
-	ids := snapshotIDs()
-	source := "snapshot"
-	if ok {
-		ids, source, _ = discoverModels(sa)
-	}
-	out := make([]map[string]any, 0, len(ids))
-	group := make([]map[string]any, 0, len(ids))
-	seen := map[string]bool{}
-	for _, id := range ids {
-		if !advertisable(id) || seen[id] {
-			continue
-		}
-		seen[id] = true
-		published := advertisedName(id)
-		entry := map[string]any{"id": published, "upstream": id}
-		if m, found := snapshotByID(id); found {
-			entry["name"] = m.Name
-			entry["context"] = m.Context
-		}
-		out = append(out, entry)
-		group = append(group, entry)
-	}
-	// The HOST list, not the plugin's own excluded_models config: the picker
-	// renders the host list, so the count beside it must come from the same place.
-	excluded, excludedSeen := hostExcludedSnapshot()
-	return map[string]any{
-		"provider":       providerName,
-		"source":         source,
-		"total_upstream": len(ids),
-		"models":         out,
-		"groups": []map[string]any{{
-			"realm":    providerName,
-			"label":    "Oxion",
-			"source":   source,
-			"count":    len(group),
-			"models":   group,
-			"excluded": excluded,
-		}},
-		"excluded":      excluded,
-		"excluded_seen": excludedSeen,
-	}
-}
-
-// firstCredential returns the first usable stored credential, for catalogue calls
-// that need one (the published list is per-account on this gateway).
-func firstCredential() (*storedAuth, string, bool) {
-	entries, err := hostAuthList()
-	if err != nil {
-		return nil, "", false
-	}
-	for _, entry := range entries {
-		if sa, ok := lookupCredential(entry.AuthIndex, entry.Name); ok && strings.TrimSpace(sa.APIKey) != "" {
-			return sa, entry.AuthIndex, true
-		}
-	}
-	return nil, "", false
 }
