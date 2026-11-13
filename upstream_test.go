@@ -15,6 +15,58 @@ import (
 // A local stand-in for the Meoo open platform
 // -----------------------------------------------------------------------------
 
+// fakeProjectRow is one row of a MULTI-project account: the project-list fields
+// plus the two legs a walk reads per project (its cloud flag and its
+// environment's project-level key). An empty AK models the measured account,
+// whose key-less projects answer the environment endpoint without a key.
+type fakeProjectRow struct {
+	URLID  string `json:"url_id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Type   string `json:"type"`
+	// Cloud is what GET .../cloud reports for this project.
+	Cloud bool `json:"-"`
+	// AK is what GET .../cloud/environment hands back. Empty = no key here.
+	AK string `json:"-"`
+}
+
+// activeRow builds one active project row, in a multi-project list.
+func activeRow(urlID, name string, cloud bool, ak string) fakeProjectRow {
+	return fakeProjectRow{URLID: urlID, Name: name, Status: "active", Type: "create-desktop", Cloud: cloud, AK: ak}
+}
+
+// projectURLIDFromPath pulls the url_id out of .../cli-compat/projects/{id}/...
+func projectURLIDFromPath(path string) string {
+	const marker = "/cli-compat/projects/"
+	index := strings.Index(path, marker)
+	if index < 0 {
+		return ""
+	}
+	rest := path[index+len(marker):]
+	if slash := strings.Index(rest, "/"); slash >= 0 {
+		return rest[:slash]
+	}
+	return rest
+}
+
+// fakeRowByURLID finds one row in a fixture list.
+func fakeRowByURLID(rows []fakeProjectRow, urlID string) (fakeProjectRow, bool) {
+	for _, row := range rows {
+		if row.URLID == urlID {
+			return row, true
+		}
+	}
+	return fakeProjectRow{}, false
+}
+
+// jsonBool renders a Go bool as JSON, so a fixture body can be assembled by hand.
+func jsonBool(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
+}
+
 // fakeOpenPlatform answers the six documented open-platform endpoints, records
 // every call and lets a test break exactly one leg at a time. Nothing here
 // touches the network: the whole reader is aimed at this server.
@@ -43,6 +95,12 @@ type fakeOpenPlatform struct {
 	createName string
 	// cloudPOSTs counts POST cloud calls.
 	cloudPOSTs int
+	// projects, when non-nil, replaces the single hardcoded project row with this
+	// list, so a test can model an account that owns several projects.
+	projects []fakeProjectRow
+	// cloudPOSTStatus, when non-zero, makes POST cloud answer that status — the
+	// shape a Free plan returns once its cloud-instance quota is used up.
+	cloudPOSTStatus int
 }
 
 func newFakeOpenPlatform() *fakeOpenPlatform {
@@ -88,6 +146,8 @@ func (f *fakeOpenPlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	projectsStatus := f.projectsStatus
 	cloudEnabled := f.cloudEnabled
 	projectAK := f.projectAK
+	projects := f.projects
+	cloudPOSTStatus := f.cloudPOSTStatus
 	f.mu.Unlock()
 
 	if authErr != 0 {
@@ -113,18 +173,41 @@ func (f *fakeOpenPlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		writeRawJSON(w, `{"success":true,"data":{"userId":"123","planCode":"free","planType":"personal","planName":"Free 免费版","activatedStartTime":"2026-11-01T00:00:00","activatedEndTime":"2026-12-01T00:00:00","benefits":[{"typeCode":"model_credits","typeName":"构建使用的模型消耗","valueType":"QUOTA","quota":12000,"used":854,"unit":null,"groupName":null}]}}`)
 	case strings.HasSuffix(path, "/cloud/environment"):
-		writeRawJSON(w, `{"success":true,"data":{"enabled":true,"envMode":"SINGLE","environment":"single","instance":{"sbInfo":{"url":"https://x.database.meoo.xyz"}},"meooProjectApiKey":"`+projectAK+`"}}`)
-	case strings.HasSuffix(path, "/cloud") && r.Method == http.MethodGet:
-		enabled := "false"
-		if cloudEnabled {
-			enabled = "true"
+		enabled := true
+		ak := projectAK
+		if projects != nil {
+			row, found := fakeRowByURLID(projects, projectURLIDFromPath(path))
+			if !found {
+				w.WriteHeader(http.StatusNotFound)
+				writeRawJSON(w, `{"success":false,"message":"no such project"}`)
+				return
+			}
+			ak = row.AK
+			enabled = row.AK != ""
 		}
-		writeRawJSON(w, `{"success":true,"data":{"enabled":`+enabled+`,"instance":{"id":181932,"appId":"app-1","status":null,"name":"Demo Cloud","description":"Demo Cloud","sbInfo":{"url":"https://x.database.meoo.xyz","publicUrl":"https://x.database.meoo.xyz","anonKey":"anon","vpcHost":""}}}}`)
+		writeRawJSON(w, `{"success":true,"data":{"enabled":`+jsonBool(enabled)+`,"envMode":"SINGLE","environment":"single","instance":{"sbInfo":{"url":"https://x.database.meoo.xyz"}},"meooProjectApiKey":"`+ak+`"}}`)
+	case strings.HasSuffix(path, "/cloud") && r.Method == http.MethodGet:
+		enabled := cloudEnabled
+		if projects != nil {
+			row, found := fakeRowByURLID(projects, projectURLIDFromPath(path))
+			if !found {
+				w.WriteHeader(http.StatusNotFound)
+				writeRawJSON(w, `{"success":false,"message":"no such project"}`)
+				return
+			}
+			enabled = row.Cloud
+		}
+		writeRawJSON(w, `{"success":true,"data":{"enabled":`+jsonBool(enabled)+`,"instance":{"id":181932,"appId":"app-1","status":null,"name":"Demo Cloud","description":"Demo Cloud","sbInfo":{"url":"https://x.database.meoo.xyz","publicUrl":"https://x.database.meoo.xyz","anonKey":"anon","vpcHost":""}}}}`)
 	case strings.HasSuffix(path, "/cloud") && r.Method == http.MethodPost:
 		// The bare shape: no success/data wrapper.
 		f.mu.Lock()
 		f.cloudPOSTs++
 		f.mu.Unlock()
+		if cloudPOSTStatus != 0 {
+			w.WriteHeader(cloudPOSTStatus)
+			writeRawJSON(w, `{"success":false,"message":"云服务实例数已达上限"}`)
+			return
+		}
 		writeRawJSON(w, `{"status":"ready","created":true,"public_url":"https://l1l7coxwlq0f.meoo.pub","warnings":[]}`)
 	case strings.HasSuffix(path, "/cli-compat/projects") && r.Method == http.MethodGet:
 		if projectsStatus != 0 {
@@ -134,6 +217,15 @@ func (f *fakeOpenPlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if projectsEmpty {
 			writeRawJSON(w, `{"success":true,"data":{"list":[],"total":0,"page":1,"page_size":20,"hasMore":false,"nextCursor":null}}`)
+			return
+		}
+		if projects != nil {
+			list, errMarshal := json.Marshal(projects)
+			if errMarshal != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			writeRawJSON(w, `{"success":true,"data":{"list":`+string(list)+`,"total":`+itoaInt(len(projects))+`,"page":1,"page_size":20,"hasMore":false,"nextCursor":null}}`)
 			return
 		}
 		writeRawJSON(w, `{"success":true,"data":{"list":[{"url_id":"l1l7coxwlq0f","name":"CPA-Model-Gateway","status":"active","type":"create-desktop","runtimeStrategy":"legacy","accessUrl":"https://x.meoo.pub"}],"total":1,"page":1,"page_size":20,"hasMore":false,"nextCursor":null}}`)
@@ -738,5 +830,349 @@ func TestJoinNotes(t *testing.T) {
 	}
 	if got := joinNotes("a", "b"); got != "a；b" {
 		t.Fatalf("joinNotes(a, b) = %q", got)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// The multi-project fallback probe
+// -----------------------------------------------------------------------------
+
+// walkHead is the account-scoped part every readAccount walk starts with, in
+// order. The project legs are appended per test.
+func walkHead() []string {
+	return []string{
+		"GET /cli-compat/account/identity",
+		"GET /cli-compat/account/points",
+		"GET /cli-compat/account/entitlement",
+		"GET /cli-compat/projects",
+	}
+}
+
+// requireCallSequence pins the COMPLETE request order. A probe is an addition to
+// a walk whose shape is itself a contract, so "no extra request" is only provable
+// by comparing every leg, not by looking for one absent path.
+func requireCallSequence(t *testing.T, platform *fakeOpenPlatform, want []string) {
+	t.Helper()
+	if got := platform.callList(); strings.Join(got, " | ") != strings.Join(want, " | ") {
+		t.Fatalf("walk drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// requireNoWrites fails on any write. The probe exists to LOOK: enableCloud and
+// createProject are exactly what it must never do.
+func requireNoWrites(t *testing.T, platform *fakeOpenPlatform) {
+	t.Helper()
+	if platform.cloudPOSTs != 0 {
+		t.Fatalf("cloud POSTs = %d, want 0", platform.cloudPOSTs)
+	}
+	for _, call := range platform.callList() {
+		if strings.HasPrefix(call, "POST ") {
+			t.Fatalf("a read-only probe must not write anything upstream, saw %q", call)
+		}
+	}
+	if platform.sawCall("POST /cli-compat/projects") {
+		t.Fatal("the discovery chain must not create a project here")
+	}
+}
+
+// measuredRows is the account from the incident report: three active projects in
+// this order, and only the third one owns a cloud instance — hence the only
+// project-level key.
+func measuredRows() []fakeProjectRow {
+	return []fakeProjectRow{
+		activeRow("o1gyf6uzfh9f", "本地客户端咨询", false, ""),
+		activeRow("a8dl5ebxoj66", "云服务开通查询", false, ""),
+		activeRow("l1l7coxwlq0f", "CPA-Model-Gateway", true, fakeProjectAK),
+	}
+}
+
+// TestProjectAKProbeAdoptsTheProjectThatCarriesTheKey is the regression for the
+// measured incident (2026-11-13): one account, three active projects in this
+// order, and only the THIRD one owns a cloud instance — hence the only
+// project-level key. Picking the first active project left project_ak_tail empty
+// and the panel reported "没有项目级 AK" while a usable key was right there.
+func TestProjectAKProbeAdoptsTheProjectThatCarriesTheKey(t *testing.T) {
+	rows := measuredRows()
+
+	t.Run("auto_provision 关闭：只读探测", func(t *testing.T) {
+		isolateMeoo(t)
+		setConfigForTest(t, func(cfg *pluginConfig) { cfg.AutoProvision = false })
+		platform := newFakeOpenPlatform()
+		platform.projects = rows
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey})
+
+		if read.ProjectAK != fakeProjectAK {
+			t.Fatalf("the account's usable project-level AK was not found: %q (%s)", read.ProjectAK, read.Note)
+		}
+		if read.ProjectURLID != "l1l7coxwlq0f" || read.ProjectName != "CPA-Model-Gateway" {
+			t.Fatalf("the leg must move to the project that carries the key, got %q/%q", read.ProjectURLID, read.ProjectName)
+		}
+		if !read.CloudEnabled {
+			t.Fatal("the adopted project owns a cloud instance, so cloud_enabled must be true")
+		}
+		if !strings.Contains(read.Note, "已改选带云服务的项目 l1l7coxwlq0f") {
+			t.Fatalf("the note must declare the switch: %s", read.Note)
+		}
+		if !strings.Contains(read.Note, "项目级 AK 读取失败") {
+			t.Fatalf("the original note wording must survive the addition: %s", read.Note)
+		}
+		if read.Outcome != outcomeOK || !read.HasNumbers {
+			t.Fatalf("points are account-scoped: %q numbers=%v", read.Outcome, read.HasNumbers)
+		}
+
+		// Only the project whose cloud is ENABLED is asked for its environment:
+		// a8dl5ebxoj66 has no cloud instance, so it is skipped after its cloud read.
+		requireCallSequence(t, platform, append(walkHead(),
+			"GET /cli-compat/projects/o1gyf6uzfh9f/cloud",
+			"GET /cli-compat/projects/o1gyf6uzfh9f/cloud/environment",
+			"GET /cli-compat/projects/a8dl5ebxoj66/cloud",
+			"GET /cli-compat/projects/l1l7coxwlq0f/cloud",
+			"GET /cli-compat/projects/l1l7coxwlq0f/cloud/environment",
+		))
+		requireNoWrites(t, platform)
+	})
+
+	t.Run("开通被套餐上限拒绝：仍然探测", func(t *testing.T) {
+		isolateMeoo(t)
+		setConfigForTest(t, func(cfg *pluginConfig) { cfg.AutoProvision = true })
+		platform := newFakeOpenPlatform()
+		platform.projects = rows
+		// Free 套餐: the cloud-instance quota is used up, which is how the real
+		// account answered when the first project was auto-provisioned.
+		platform.cloudPOSTStatus = http.StatusBadRequest
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey})
+
+		if read.ProjectAK != fakeProjectAK || read.ProjectURLID != "l1l7coxwlq0f" {
+			t.Fatalf("the probe must also run when provisioning was refused: %q/%q (%s)", read.ProjectURLID, read.ProjectAK, read.Note)
+		}
+		if !strings.Contains(read.Note, "自动开通云服务失败") {
+			t.Fatalf("the refusal must be declared: %s", read.Note)
+		}
+		if !strings.Contains(read.Note, "已改选带云服务的项目 l1l7coxwlq0f") {
+			t.Fatalf("the note must declare the switch: %s", read.Note)
+		}
+		if platform.cloudPOSTs != 1 {
+			t.Fatalf("only the walk's own attempt may be a write: cloud POSTs = %d", platform.cloudPOSTs)
+		}
+		requireCallSequence(t, platform, append(walkHead(),
+			"GET /cli-compat/projects/o1gyf6uzfh9f/cloud",
+			"POST /cli-compat/projects/o1gyf6uzfh9f/cloud",
+			"GET /cli-compat/projects/o1gyf6uzfh9f/cloud/environment",
+			"GET /cli-compat/projects/a8dl5ebxoj66/cloud",
+			"GET /cli-compat/projects/l1l7coxwlq0f/cloud",
+			"GET /cli-compat/projects/l1l7coxwlq0f/cloud/environment",
+		))
+		if platform.sawCall("POST /cli-compat/projects") {
+			t.Fatal("a probe must never create a project")
+		}
+	})
+
+	t.Run("已存项目优先于列表顺序", func(t *testing.T) {
+		isolateMeoo(t)
+		setConfigForTest(t, func(cfg *pluginConfig) { cfg.AutoProvision = false })
+		platform := newFakeOpenPlatform()
+		platform.projects = []fakeProjectRow{
+			activeRow("first-active", "第一个 active", false, ""),
+			activeRow("earlier-in-list", "列表里更靠前", true, fakeProjectAK2),
+			activeRow("stored-project", "本插件已知的项目", true, fakeProjectAK),
+		}
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey, ProjectURLID: "stored-project"})
+
+		if read.ProjectAK != fakeProjectAK || read.ProjectURLID != "stored-project" || read.ProjectName != "本插件已知的项目" {
+			t.Fatalf("the stored project must be probed first: %q/%q/%q (%s)", read.ProjectURLID, read.ProjectName, read.ProjectAK, read.Note)
+		}
+		// The candidate ORDER is observable: the probe stops at the stored project,
+		// so the earlier list row is never even asked for its cloud state.
+		if platform.sawCall("GET /cli-compat/projects/earlier-in-list/cloud") {
+			t.Fatal("a stored project that answers must end the probe; list order is only the fallback")
+		}
+		requireCallSequence(t, platform, append(walkHead(),
+			"GET /cli-compat/projects/first-active/cloud",
+			"GET /cli-compat/projects/first-active/cloud/environment",
+			"GET /cli-compat/projects/stored-project/cloud",
+			"GET /cli-compat/projects/stored-project/cloud/environment",
+		))
+		requireNoWrites(t, platform)
+	})
+}
+
+// TestProjectAKProbeNeverProvisionsWhenNoProjectHasACloudInstance is the negative
+// control: with three active projects and a cloud instance on none of them, the
+// probe must not open one. On a Free plan that POST is the very failure this
+// fallback exists for (云服务实例数已达上限), and it leaves resources behind.
+func TestProjectAKProbeNeverProvisionsWhenNoProjectHasACloudInstance(t *testing.T) {
+	rows := []fakeProjectRow{
+		activeRow("o1gyf6uzfh9f", "本地客户端咨询", false, ""),
+		activeRow("a8dl5ebxoj66", "云服务开通查询", false, ""),
+		activeRow("l1l7coxwlq0f", "CPA-Model-Gateway", false, ""),
+	}
+
+	t.Run("auto_provision 关闭", func(t *testing.T) {
+		isolateMeoo(t)
+		setConfigForTest(t, func(cfg *pluginConfig) { cfg.AutoProvision = false })
+		platform := newFakeOpenPlatform()
+		platform.projects = rows
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey})
+
+		if read.ProjectAK != "" {
+			t.Fatalf("nothing upstream has a key, so the leg must stay empty: %q", read.ProjectAK)
+		}
+		// The exit state is the pre-change one: the first active project stays
+		// chosen, nothing is opened, and the account keeps its numbers.
+		if read.ProjectURLID != "o1gyf6uzfh9f" || read.CloudEnabled {
+			t.Fatalf("the chosen project must be left where the old walk left it: %q cloud=%v", read.ProjectURLID, read.CloudEnabled)
+		}
+		if read.Outcome != outcomeOK || !read.HasNumbers {
+			t.Fatalf("a key-less project leg is a note, never an account verdict: %q numbers=%v", read.Outcome, read.HasNumbers)
+		}
+		if !strings.Contains(read.Note, "项目级 AK 读取失败") {
+			t.Fatalf("the original wording must survive: %s", read.Note)
+		}
+		if !strings.Contains(read.Note, "已检查其余 2 个项目，均无可用项目级 AK") {
+			t.Fatalf("an exhausted probe must say how much it checked: %s", read.Note)
+		}
+		requireCallSequence(t, platform, append(walkHead(),
+			"GET /cli-compat/projects/o1gyf6uzfh9f/cloud",
+			"GET /cli-compat/projects/o1gyf6uzfh9f/cloud/environment",
+			"GET /cli-compat/projects/a8dl5ebxoj66/cloud",
+			"GET /cli-compat/projects/l1l7coxwlq0f/cloud",
+		))
+		requireNoWrites(t, platform)
+	})
+
+	t.Run("auto_provision 开启：只开通被选中的那一个", func(t *testing.T) {
+		isolateMeoo(t)
+		setConfigForTest(t, func(cfg *pluginConfig) { cfg.AutoProvision = true })
+		platform := newFakeOpenPlatform()
+		platform.projects = rows
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey})
+
+		if platform.cloudPOSTs != 1 || !platform.sawCall("POST /cli-compat/projects/o1gyf6uzfh9f/cloud") {
+			t.Fatalf("the probe opened cloud instances it was only meant to look at: %v", platform.callList())
+		}
+		if platform.sawCall("POST /cli-compat/projects") {
+			t.Fatal("the probe must never create a project")
+		}
+		if read.ProjectURLID != "o1gyf6uzfh9f" || read.ProjectAK != "" {
+			t.Fatalf("the walk's own choice must not move on an exhausted probe: %q/%q", read.ProjectURLID, read.ProjectAK)
+		}
+	})
+}
+
+// TestProjectLegStaysSingleShotWhenAKeyIsAlreadyFound: the probe is a FALLBACK,
+// not an extra round of requests. As long as the existing walk yields a
+// project-level key, the sequence must stay byte-for-byte the documented one.
+func TestProjectLegStaysSingleShotWhenAKeyIsAlreadyFound(t *testing.T) {
+	want := []string{
+		"GET /cli-compat/account/identity",
+		"GET /cli-compat/account/points",
+		"GET /cli-compat/account/entitlement",
+		"GET /cli-compat/projects",
+		"GET /cli-compat/projects/l1l7coxwlq0f/cloud",
+		"GET /cli-compat/projects/l1l7coxwlq0f/cloud/environment",
+	}
+
+	t.Run("单项目", func(t *testing.T) {
+		isolateMeoo(t)
+		platform := newFakeOpenPlatform()
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey})
+
+		if read.ProjectAK != fakeProjectAK || read.ProjectURLID != "l1l7coxwlq0f" {
+			t.Fatalf("the single-project walk changed shape: %q/%q", read.ProjectURLID, read.ProjectAK)
+		}
+		if read.Note != "" {
+			t.Fatalf("a clean single-project walk must carry no note: %s", read.Note)
+		}
+		requireCallSequence(t, platform, want)
+	})
+
+	t.Run("多项目但首个 active 就有项目级 AK", func(t *testing.T) {
+		isolateMeoo(t)
+		platform := newFakeOpenPlatform()
+		platform.projects = []fakeProjectRow{
+			activeRow("l1l7coxwlq0f", "CPA-Model-Gateway", true, fakeProjectAK),
+			activeRow("o1gyf6uzfh9f", "本地客户端咨询", true, fakeProjectAK2),
+			activeRow("a8dl5ebxoj66", "云服务开通查询", true, fakeProjectAK2),
+		}
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey})
+
+		if read.ProjectAK != fakeProjectAK || read.ProjectURLID != "l1l7coxwlq0f" {
+			t.Fatalf("a key on the first active project must end the walk: %q/%q", read.ProjectURLID, read.ProjectAK)
+		}
+		if read.Note != "" {
+			t.Fatalf("nothing was missing, so there is nothing to report: %s", read.Note)
+		}
+		requireCallSequence(t, platform, want)
+	})
+}
+
+// TestMeasuredAccountReachesThePanelWithAProjectKey closes the loop on the
+// user-visible half of the defect — the report was "面板显示没有项目级 AK". It
+// drives the real sweep and reads the row the panel is served.
+func TestMeasuredAccountReachesThePanelWithAProjectKey(t *testing.T) {
+	isolateMeoo(t)
+	setConfigForTest(t, func(cfg *pluginConfig) { cfg.AutoProvision = false })
+	platform := newFakeOpenPlatform()
+	platform.projects = measuredRows()
+	swapOpenPlatform(t, platform.server(t).URL)
+
+	if _, errAdd := addAccount(fakeUserKey, "实测账号"); errAdd != nil {
+		t.Fatalf("addAccount: %v", errAdd)
+	}
+	refreshed, errRefresh := refreshAll(true)
+	if errRefresh != nil || refreshed != 1 {
+		t.Fatalf("refreshAll = %d, %v", refreshed, errRefresh)
+	}
+
+	payload := assembleView(refreshed, true)
+	rows, okRows := payload["accounts"].([]accountView)
+	if !okRows || len(rows) != 1 {
+		t.Fatalf("panel rows = %#v", payload["accounts"])
+	}
+	row := rows[0]
+	if row.ProjectAKState != "ok" {
+		t.Fatalf("the panel still reports no project-level AK: %+v", row)
+	}
+	if row.ProjectURLID != "l1l7coxwlq0f" || row.ProjectName != "CPA-Model-Gateway" || !row.CloudEnabled {
+		t.Fatalf("the panel must point at the project that carries the key: %+v", row)
+	}
+	if row.ProjectAKTail != keyTail(fakeProjectAK) {
+		t.Fatalf("project_ak_tail = %q, want the tail of the adopted key", row.ProjectAKTail)
+	}
+	if !strings.Contains(row.Note, "已改选带云服务的项目 l1l7coxwlq0f") {
+		t.Fatalf("the row must declare the switch: %s", row.Note)
+	}
+	summary, okSummary := payload["summary"].(meooSummary)
+	if !okSummary {
+		t.Fatalf("summary shape: %#v", payload["summary"])
+	}
+	for _, summaryNote := range summary.Notes {
+		if strings.Contains(summaryNote, "还没有项目级 AK") {
+			t.Fatalf("the account still counts as key-less: %s", summaryNote)
+		}
+	}
+
+	// The adopted project and its key belong in the account store: the sweep is
+	// the only writer of either.
+	accounts, errList := listAccounts()
+	if errList != nil || len(accounts) != 1 {
+		t.Fatalf("listAccounts: %v (%d accounts)", errList, len(accounts))
+	}
+	if accounts[0].ProjectURLID != "l1l7coxwlq0f" || accounts[0].ProjectAK != fakeProjectAK {
+		t.Fatalf("the switch was not persisted: %q/%q", accounts[0].ProjectURLID, accounts[0].ProjectAK)
 	}
 }

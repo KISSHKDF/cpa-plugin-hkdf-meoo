@@ -26,6 +26,12 @@
 //	identity -> projects (first status=active) -> cloud (enable when off)
 //	         -> environment (project-level AK) -> points -> entitlement
 //
+// The project-level AK only exists in the project that owns a cloud instance, so
+// when that first-active walk ends with no key, resolveProject appends ONE
+// read-only probe over the remaining active projects (stored url_id first). The
+// probe reads cloud state and environment only: it never enables a cloud
+// instance and never creates a project.
+//
 // Only the two provisioning POSTs write anything upstream, and both are gated by
 // the auto_provision config key (config.go). Everything else is a read.
 //
@@ -744,14 +750,109 @@ func resolveProject(userKey string, stored accountRecord) projectLeg {
 
 	environment, errEnvironment := fetchProjectEnvironment(userKey, leg.URLID)
 	if errEnvironment != nil {
-		if leg.AK == "" {
-			leg.Note = joinNotes(leg.Note, "项目级 AK 读取失败："+note(errEnvironment.Error()))
+		if leg.AK != "" {
+			// A key is already stored for this account: nothing to recover, and a
+			// note here would only be noise.
+			return leg
+		}
+		leg.Note = joinNotes(leg.Note, "项目级 AK 读取失败："+note(errEnvironment.Error()))
+
+		// The chosen project answered nothing, and "chosen" only means FIRST
+		// ACTIVE — not "carries a project-level key". On an account with several
+		// projects the key lives in exactly one of them (and only where a cloud
+		// instance exists), so a first-active pick can end with no AK at all while
+		// a usable one sits right next to it. Walk the rest, READ-ONLY, before
+		// declaring the account key-less.
+		adopted, key, checked := probeProjectAK(userKey, projects, leg.URLID, stored.ProjectURLID)
+		switch {
+		case adopted.URLID != "":
+			leg.URLID = adopted.URLID
+			leg.Name = adopted.Name
+			leg.AK = key
+			leg.CloudEnabled = true
+			leg.Note = joinNotes(leg.Note, "已改选带云服务的项目 "+adopted.URLID)
+		case checked > 0:
+			leg.Note = joinNotes(leg.Note, fmt.Sprintf("已检查其余 %d 个项目，均无可用项目级 AK", checked))
 		}
 		return leg
 	}
 	leg.AK = strings.TrimSpace(environment.MeooProjectAPIKey)
 	leg.CloudEnabled = leg.CloudEnabled || environment.Enabled
 	return leg
+}
+
+// probeProjectAK searches the OTHER active projects for a usable project-level
+// key, and returns the adopted project, that key and how many candidates were
+// inspected (0 = there was nothing else to look at).
+//
+// It is read-only by construction: the only two calls it makes are fetchCloud and
+// fetchProjectEnvironment. A probe must never run enableCloud or createProject —
+// provisioning while looking would burn a plan's cloud-instance quota (the exact
+// failure that motivated this fallback) and would leave resources behind in an
+// account that never asked for them.
+//
+// A candidate is accepted only when its cloud instance is ENABLED and its
+// environment hands back a non-empty project-level key: an unopened project has
+// no environment to read, and a read failure is not proof of anything, so both
+// are skipped rather than fatal.
+func probeProjectAK(userKey string, projects []meooProject, chosenURLID, storedURLID string) (meooProject, string, int) {
+	candidates := probeCandidates(projects, chosenURLID, storedURLID)
+	for _, candidate := range candidates {
+		cloud, errCloud := fetchCloud(userKey, candidate.URLID)
+		if errCloud != nil || !cloud.Enabled {
+			continue
+		}
+		environment, errEnvironment := fetchProjectEnvironment(userKey, candidate.URLID)
+		if errEnvironment != nil {
+			continue
+		}
+		key := strings.TrimSpace(environment.MeooProjectAPIKey)
+		if key == "" {
+			continue
+		}
+		return candidate, key, len(candidates)
+	}
+	return meooProject{}, "", len(candidates)
+}
+
+// probeCandidates orders the projects a probe should visit: the other ACTIVE
+// rows, with the stored project first (this plugin already believes in it, so a
+// re-read beats a walk) and the project list's own order after that. The stored
+// url_id is only promoted when the list still carries it as an active row; a
+// stored id that the list does not mention may be paused or gone, and a probe
+// must not spend requests guessing.
+func probeCandidates(projects []meooProject, chosenURLID, storedURLID string) []meooProject {
+	chosenURLID = strings.TrimSpace(chosenURLID)
+	storedURLID = strings.TrimSpace(storedURLID)
+
+	rest := make([]meooProject, 0, len(projects))
+	seen := make(map[string]bool, len(projects))
+	for _, project := range projects {
+		urlID := strings.TrimSpace(project.URLID)
+		if urlID == "" || urlID == chosenURLID || seen[urlID] {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(project.Status), "active") {
+			continue
+		}
+		seen[urlID] = true
+		project.URLID = urlID
+		rest = append(rest, project)
+	}
+	if storedURLID == "" || storedURLID == chosenURLID {
+		return rest
+	}
+	for index, project := range rest {
+		if project.URLID != storedURLID {
+			continue
+		}
+		ordered := make([]meooProject, 0, len(rest))
+		ordered = append(ordered, project)
+		ordered = append(ordered, rest[:index]...)
+		ordered = append(ordered, rest[index+1:]...)
+		return ordered
+	}
+	return rest
 }
 
 // projectNameByURLID returns the listed name of one project, or "" when the list
