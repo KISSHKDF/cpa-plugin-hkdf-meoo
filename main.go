@@ -114,9 +114,7 @@ import (
 // a build-time variable: the routes are string literals in the gate's view.
 const providerName = "meoo"
 
-// pluginLogoURL is empty: this plugin has no brand asset of its own, and the
-// host falls back to the plugin metadata logo.
-const pluginLogoURL = ""
+// pluginLogoURL is declared in logo.go together with its provenance.
 
 // version self-reports the plugin build. Date-epoch, matching the fleet
 // standard, and locked byte-for-byte to the VERSION file by
@@ -126,7 +124,7 @@ const pluginLogoURL = ""
 //	baseline commit is already tagged as the tree's starting point, so the first
 //	real release takes the next number — ship.ps1 refuses a tag that is not on
 //	HEAD. Nothing about the tree differs from what 2026.11.13.1 would have been.)
-var version = "2026.11.13.3"
+var version = "2026.11.13.4"
 
 var hostAPI *C.cliproxy_host_api
 
