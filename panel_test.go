@@ -6,37 +6,19 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Two gate items that live OUTSIDE this tree. Neither is a silent skip: both are
-// recorded here (and in the delivery report) because fixing them means editing a
-// file this change was not allowed to touch.
+// Two gate items that once lived OUTSIDE this tree, both RESOLVED (2026-11-13).
+// Kept here as the audit trail; drop this block when it outlives its value.
 //
-//  1. scripts/panel-js-check.mjs is STILL THE OXION COPY. Its `requiredIds` asserts
-//     oxion's own skeleton (summary / cards / models / btnReload / btnEgress /
-//     btnImport / inpKey / inpProxy / importOut / btnModelCtl / modelCtlCard /
-//     modelGroupsBox / btnModelSave / btnModelReload / btnModelAll / btnModelNone /
-//     modelCtlOut). meoo's panel has none of those ids, so that build gate is
-//     RED on this tree no matter how correct the panel is — and its own sibling
-//     (lingxi/scripts/panel-js-check.mjs) already documents the lesson: a gate
-//     asserting ANOTHER tree's skeleton "would fail forever and teach everyone to
-//     ignore the gate", which is why lingxi wrote its own. The fix is to swap that
-//     array for meoo's 22 ids (refreshBtn, keyInput, authBox, metaHint, svtime,
-//     filterBar, cntAll, cntReadable, cntIn, cntOut, cntStale, cntDead, autoPoll,
-//     summaryBox, grid, toasts, modalMask, modalTitle, modalBody, modalFoot,
-//     addKey, addLabel). Measured 2026-11-13: with exactly that array, the same
-//     script over this same panel.html answers "2 个 <script> 块语法通过，22 个 id，
-//     0 个 el() 引用全部命中". Fabricating 18 oxion ids inside panel.html to please
-//     the stale list would be the "let the gate rot" move, so it was not done.
-//
-//  2. dead-declaration.mjs now reports one PANEL_CALLS_UNDECLARED_PATH for
-//     config/api-keys/openai-compatibility — the HOST's config path that §7.3
-//     requires the panel to read for the CPA cross-check. It is deliberately not a
-//     plugin route, so the plugin's route table must not declare it; the gate's own
-//     message says where such paths belong ("host-level paths belong in
-//     panelApiVars/whitelist, not silence"). The entry goes in
-//     cpa-plugin-updater/gates/dead-declaration.whitelist.json, whose workbuddy
-//     `quota` entry is the precedent. The cross-check is best-effort by contract:
-//     TestPanelMarksUnusableModelsAndDegradesCrossCheck pins that a failure there
-//     degrades to 未知 and never touches the readings.
+//  1. scripts/panel-js-check.mjs WAS the oxion copy (its requiredIds asserted
+//     oxion's skeleton, so the build gate was red here no matter what).
+//     RESOLVED 2026-11-13: the script now asserts meoo's own 22-id skeleton
+//     and passes ("2 个 <script> 块语法通过，22 个 id，0 个 el() 引用全部命中").
+//  2. PANEL_CALLS_UNDECLARED_PATH for config/api-keys/openai-compatibility —
+//     the HOST config path §7.3 requires for the CPA cross-check. RESOLVED
+//     2026-11-13: registered in cpa-plugin-updater/gates/dead-declaration.whitelist.json
+//     (precedent: workbuddy's `quota` entry). Still best-effort by contract:
+//     TestPanelMarksUnusableModelsAndDegradesCrossCheck pins that a failure
+//     there degrades to 未知 and never touches the readings.
 // ---------------------------------------------------------------------------
 
 // TestPanelHTMLContract pins the behaviour the operator asked for by name:
