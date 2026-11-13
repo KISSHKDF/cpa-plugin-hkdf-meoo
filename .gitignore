@@ -1,0 +1,34 @@
+# Build artifacts (release gate `tree-no-artifacts` requires source-only trees)
+build-out/
+*.dll
+*.h
+*.exe
+*.lib
+*.o
+*.a
+
+# Local backups (history belongs in git, not on disk)
+*.bak
+*.bak-*
+*~
+*.snap-*
+config.yaml.snap-*
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+# --- build output: releases live in C:\CLIP\_plugin-archive, not in the source tree
+# --- hand-rolled snapshots: git history replaces them (legacy copies archived 2026-10-17)
+_bak*/
+_removed*/
+_out/
+_probe/
+_loadtest/
+*.bak*
+# --- local run notes and captures, not source
+*.log
+*.png
+config.yaml.snap*
+DEPLOY-RISK-*.md
