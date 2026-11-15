@@ -124,7 +124,7 @@ const providerName = "meoo"
 //	baseline commit is already tagged as the tree's starting point, so the first
 //	real release takes the next number — ship.ps1 refuses a tag that is not on
 //	HEAD. Nothing about the tree differs from what 2026.11.13.1 would have been.)
-var version = "2026.11.14.1"
+var version = "2026.11.15.2"
 
 var hostAPI *C.cliproxy_host_api
 

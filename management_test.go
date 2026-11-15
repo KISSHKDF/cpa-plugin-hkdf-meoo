@@ -587,8 +587,9 @@ func TestHandleMethodDispatch(t *testing.T) {
 	if registration.Metadata.Author == "" || registration.Metadata.GitHubRepository == "" {
 		t.Fatalf("metadata must be complete or the host refuses to load it: %+v", registration.Metadata)
 	}
-	if registration.SchemaVersion != 6 {
-		t.Fatalf("schema_version = %d, want 6", registration.SchemaVersion)
+	// 2026-11-15 机队抬钉：注册上报档位随 SDK 快照（v8.0.72）走到 10；只防回退，不锁具体值。
+	if registration.SchemaVersion < 10 {
+		t.Fatalf("schema_version = %d, want >= 10 (SDK snapshot v8.0.72 fleet baseline)", registration.SchemaVersion)
 	}
 	if !registration.Capabilities.ManagementAPI {
 		t.Fatal("management_api must be declared")

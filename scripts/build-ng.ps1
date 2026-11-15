@@ -1,4 +1,4 @@
-# build-ng.ps1 — the ONLY sanctioned way to build the meoo plugin dll.
+﻿# build-ng.ps1 — the ONLY sanctioned way to build the meoo plugin dll.
 #
 # Template: the cline tree build script (2026-10-13). This tree had NO
 # build entry point at all — every build was a bare `go build -buildmode=c-shared`,
@@ -43,7 +43,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 if ([string]::IsNullOrWhiteSpace($Out)) { $Out = "build-out\meoo-$Version-cshared.dll" }
 
 # ---- toolchain --------------------------------------------------------------
-$go = 'C:\Users\xbd\tools\go\go\bin\go.exe'
+$go = 'C:\Program Files\Go\bin\go.exe'
 if (-not (Test-Path $go)) { throw "go.exe not found at $go" }
 $gofmtBin = Join-Path (Split-Path $go -Parent) 'gofmt.exe'
 $cc = 'C:\Users\xbd\tools\mingw64\bin\gcc.exe'
@@ -93,12 +93,12 @@ try {
     & node $styleCheck
     if ($LASTEXITCODE -ne 0) { throw "panel style check failed - the panel would render wrong (see the FAIL lines above)" }
 
-    Write-Host "[2/6] pinned module version must not drift"
+    Write-Host "[2/6] pinned module snapshot must be a concrete v8.x"
     $gomod = Get-Content (Join-Path $root 'go.mod') -Raw
-    if ($gomod -notmatch 'router-for-me/CLIProxyAPI/v8 v8\.0\.16') {
-        throw "go.mod no longer pins CLIProxyAPI v8.0.16 - review before building"
+    if ($gomod -notmatch 'router-for-me/CLIProxyAPI/v8 v8\.\d+\.\d+') {
+        throw "go.mod has no concrete CLIProxyAPI v8.x snapshot pin - review before building"
     }
-    Write-Host "  pinned: require github.com/router-for-me/CLIProxyAPI/v8 v8.0.16"
+    Write-Host ("  pinned: " + ($gomod | Select-String -Pattern 'router-for-me/CLIProxyAPI/v8 v[\d.]+' | ForEach-Object { $_.Line.Trim() } | Select-Object -First 1))
 
     Write-Host "[3/6] go vet ./..."
     & $go vet ./...

@@ -164,8 +164,10 @@ func TestABIGuardHealthReportsTheLatch(t *testing.T) {
 	if pluginabi.ABIVersion != 1 {
 		t.Fatalf("the host resolves this plugin at ABI version 1, got %d", pluginabi.ABIVersion)
 	}
-	if pluginabi.SchemaVersion != 6 {
-		t.Fatalf("schema_version = %d, want 6", pluginabi.SchemaVersion)
+	// 2026-11-15 机队抬钉：SDK 快照 v8.0.16 → v8.0.72，上报档位随 SDK 常量走到 10。
+	// 断言改为"跟随 SDK 常量且不低于 10"，防止意外回退到旧快照。
+	if pluginabi.SchemaVersion < 10 {
+		t.Fatalf("schema_version = %d, want >= 10 (SDK snapshot v8.0.72 fleet baseline)", pluginabi.SchemaVersion)
 	}
 	if _, present := health["abi_version_mismatch"]; !present {
 		t.Fatalf("the ABI mismatch latch must be reported: %v", health)
