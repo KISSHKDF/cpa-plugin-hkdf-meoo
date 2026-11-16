@@ -238,6 +238,77 @@ func TestPanelDialogsAreSelfDrawn(t *testing.T) {
 	}
 }
 
+// TestCreditBarsDrainFromTheRight is the regression lock for a user-visible
+// direction bug (2026-11-16): the account card drew the USED slice first and the
+// REMAINING slice second, so the green bar grew from the left edge as credits
+// were spent — it read as "credits are being eaten from the left". Loomy, the
+// house reference for this panel family, draws the opposite way: remaining first
+// (green, anchored left), used last (grey, hanging on the right edge), so the bar
+// shortens from the right. Only the JS template decides that order — both
+// segments share one class family, so no string-presence or CSS assertion can
+// catch a swap. Hence the positional assertions, plus the summary bar's own
+// direction (it used to be a "used progress" bar, i.e. the opposite reading of
+// the card bars on the same card).
+func TestCreditBarsDrainFromTheRight(t *testing.T) {
+	html := string(panelHTML)
+	card := sliceBetween(t, html, "function card(a){", "\nfunction renderGrid(")
+
+	const remainSeg = `<span class="cd-seg" style="flex:'`
+	const usedSeg = `<span class="cd-seg used" style="flex:'`
+	iRemain := strings.Index(card, remainSeg)
+	iUsed := strings.Index(card, usedSeg)
+	if iRemain < 0 {
+		t.Fatalf("账号卡的进度条不再画「剩下」段（%q）", remainSeg)
+	}
+	if iUsed < 0 {
+		t.Fatalf("账号卡的进度条不再画「已耗」段（%q）", usedSeg)
+	}
+	if iRemain > iUsed {
+		t.Fatal("账号卡把「已耗」段画在「剩下」段之前：绿条会从左往右长，看起来像积分从左边被吃掉（loomy 是剩下的贴左、用掉的挂右端）")
+	}
+	if !strings.Contains(card, "remain.toFixed(2)") || !strings.Contains(card, "used.toFixed(2)") {
+		t.Fatalf("进度条的两个段必须分别用 remain / used 的宽度，实际：%s", card)
+	}
+	// 零宽段不画：used=0 时若仍发一个 flex:0 的灰段，轨道右端会多出 3px 灰边
+	//（.cd-seg 有 min-width:3px 的下限），看上去像"已经用掉一点"。
+	if !strings.Contains(card, "(remain>0 ?") || !strings.Contains(card, "(used>0 ?") {
+		t.Fatal("进度条没有按 >0 过滤零宽段：min-width 会画出假的已耗/剩余边角")
+	}
+
+	// 汇总条与卡片条同一口径：宽度 = 可用占比，颜色也按可用占比取。
+	if !strings.Contains(html, "总可用 / 总总量") {
+		t.Fatal("汇总条的标题不是「总可用 / 总总量」：卡片条已是可用口径，汇总条必须同口径")
+	}
+	if strings.Contains(html, "总已耗 / 总总量") {
+		t.Fatal("汇总条仍在用「总已耗 / 总总量」的已耗进度口径")
+	}
+	if !strings.Contains(html, "barColor(pct)") || strings.Contains(html, "barColor(100-pct)") {
+		t.Fatal("汇总条的颜色仍按「已耗」取（barColor(100-pct)），与卡片条方向相反")
+	}
+
+	// loomy 的段宽有 3px 下限；meoo 原来写 0，小额剩余会渲染成空条。
+	if !strings.Contains(declBlock(t, html, ".cd-seg{"), "min-width:3px") {
+		t.Fatal(".cd-seg 没有 3px 下限（与 loomy 不一致）：小额剩余会渲染成空条")
+	}
+}
+
+// sliceBetween returns the text between two markers, failing the test when either
+// marker is missing (so a renamed function cannot make a positional assertion
+// silently pass on an empty string).
+func sliceBetween(t *testing.T, s, open, until string) string {
+	t.Helper()
+	i := strings.Index(s, open)
+	if i < 0 {
+		t.Fatalf("找不到起点 %q", open)
+	}
+	rest := s[i+len(open):]
+	j := strings.Index(rest, until)
+	if j < 0 {
+		t.Fatalf("起点 %q 之后找不到终点 %q", open, until)
+	}
+	return rest[:j]
+}
+
 // declBlock returns the declaration block that starts with marker ("}." or "};"),
 // so a CSS assertion can be scoped to one selector instead of the whole sheet.
 func declBlock(t *testing.T, html, marker string) string {
