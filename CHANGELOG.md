@@ -1,3 +1,11 @@
+## 2026.11.20.2
+
+**新增树卫生守卫：构建产物绝不许留在源码树里（2026-11-20）。**
+
+- 新增 `tree_hygiene_test.go`（`TestTreeHasNoBuildArtifacts`）：扫全树（`build-out/` 与 `.git` 除外）的 `.dll/.h/.exe/.lib/.o/.a`，命中即在 `go test` 阶段报红并打印可执行修复指引（自检编译改用 `go vet`+`go test`；或 `go build -o` 指向树外；正式构件走 `scripts/build-ng.ps1`）。判据与发布门禁 `tree-no-artifacts` 同口径，且同样不读 `.gitignore`。
+- 理由：自检时跑 `go build ./...` 会在含 `package main` 的目录里把可执行文件写到当前目录（`meoo.exe`），产物虽被 `.gitignore` 忽略但门禁扫真实文件系统 ⇒ 每次发版必被拦一次。同树历史已犯过多次，且前几次的记录只写进 CHANGELOG（没人会在 build 前翻它）—— 改成测试守卫才管得住。
+- 阴性对照：放一个 `meoo.exe` 进树 → 断言当场报红并打印修复指引；删除后复跑绿。
+
 ## 2026.11.20.1
 
 **截断改为码点安全：账号备注、身份显示名与项目名不再被切成半个汉字（truncate 码点自护）。**
