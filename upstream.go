@@ -60,6 +60,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // Endpoint bases. Variables, not constants, so a unit test can aim the whole
@@ -655,13 +656,25 @@ func gatewayModelUsable(name string) (bool, string) {
 
 // displayModelName renders "qwen3.8-flash" as "Qwen3.8 Flash" for the panel. The
 // gateway publishes machine ids only; the panel needs something an operator reads.
+//
+// 2026-11-20：首字母大写改为按 **rune** 切，不是 part[:1]。
+// 理由与 truncateUTF8Bytes 同源（见 main.go）：part[:1] 只切 1 字节，一旦上游把
+// 中文显示名（3 字节/字）或带 emoji 的模型名发下来，就会切出半个字符 ——
+// 面板显示成 U+FFFD，且这个坏字节会跟着卡片/凭据一起落盘。
+// 纯 ASCII 输入结果逐字节不变（rune 边界 == 字节边界），所以这是严格的收窄。
 func displayModelName(name string) string {
 	parts := strings.FieldsFunc(strings.TrimSpace(name), func(r rune) bool { return r == '-' || r == '_' || r == ' ' })
 	for i, part := range parts {
 		if part == "" {
 			continue
 		}
-		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		first, size := utf8.DecodeRuneInString(part)
+		if first == utf8.RuneError && size == 1 {
+			// 非法 UTF-8：原样保留，不放大损坏（DecodeRuneInString 的 RuneError/size==1
+			// 是"这一字节解不出字符"的专用信号）。
+			continue
+		}
+		parts[i] = strings.ToUpper(string(first)) + part[size:]
 	}
 	if len(parts) == 0 {
 		return name

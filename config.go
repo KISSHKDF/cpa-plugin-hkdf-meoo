@@ -168,13 +168,19 @@ func clampRefreshMinutes(n int) int {
 // clampProjectName refuses a name the create-project POST would reject. An empty
 // or whitespace-only value falls back to the default rather than creating a
 // project called "".
+//
+// 2026-11-20: the cap is a BYTE cap (the upstream limit), but it is now applied at
+// a rune boundary. A project name is operator-typed text and is routinely Chinese;
+// `trimmed[:64]` split the last rune, so the name this plugin POSTed was not valid
+// UTF-8 (and the persisted project name came back as a replacement character).
+// Same 64-byte ceiling, never an over-long name: strictly more conservative.
 func clampProjectName(name string) string {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
 		return projectNameDefault
 	}
 	if len(trimmed) > projectNameMaxLen {
-		return trimmed[:projectNameMaxLen]
+		return truncateUTF8Bytes(trimmed, projectNameMaxLen)
 	}
 	return trimmed
 }

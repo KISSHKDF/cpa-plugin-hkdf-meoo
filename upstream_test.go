@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 )
 
 // -----------------------------------------------------------------------------
@@ -668,6 +669,51 @@ func TestGatewayCatalogueAndTheKnownUnusableModel(t *testing.T) {
 	}
 	if got := displayModelName(""); got != "" {
 		t.Fatalf("displayModelName(\"\") = %q", got)
+	}
+}
+
+// TestDisplayModelNameNeverSplitsARune 钉住 2026-11-20 的修正：首字母大写必须按
+// rune 切，不能 part[:1]。
+//
+// 旧写法 part[:1] 只切 1 字节。上游一旦发下中文显示名（3 字节/字）或 emoji（4 字节）
+// 的模型名，就会切出半个字符，面板显示 U+FFFD 且这个坏字节会跟着卡片/凭据落盘。
+// 纯 ASCII 是这条改动的对照：必须逐字节不变（否则就是回归）。
+func TestDisplayModelNameNeverSplitsARune(t *testing.T) {
+	// ASCII 对照：与旧实现结果必须一致。
+	for _, tc := range []struct{ in, want string }{
+		{"qwen3.8-flash", "Qwen3.8 Flash"},
+		{"glm_4.6", "Glm 4.6"},
+		{"a", "A"},
+		{"", ""},
+	} {
+		if got := displayModelName(tc.in); got != tc.want {
+			t.Fatalf("displayModelName(%q) = %q, want %q（ASCII 不许回归）", tc.in, got, tc.want)
+		}
+	}
+
+	// 非 ASCII：只要输入合法 UTF-8，输出就必须合法 UTF-8。
+	for _, in := range []string{
+		"智能体-flash",
+		"高速模型",
+		"🔒lock-model",
+		"混合MiX-模型",
+	} {
+		got := displayModelName(in)
+		if !utf8.ValidString(got) {
+			t.Fatalf("displayModelName(%q) 产出非法 UTF-8: %q", in, got)
+		}
+		if got == "" {
+			t.Fatalf("displayModelName(%q) 返回空串，不该吃掉整段输入", in)
+		}
+	}
+
+	// 夹具自检：确认这些输入真的能触发旧缺陷（part[:1] 会切碎首字）。
+	// 没有这条，"夹具恰好落在边界上"的假绿会骗过整条用例。
+	for _, in := range []string{"智能体-flash", "🔒lock-model"} {
+		first := strings.SplitN(in, "-", 2)[0]
+		if utf8.ValidString(first[:1]) {
+			t.Fatalf("夹具 %q 的首字节恰在 rune 边界上，本条用例无法暴露旧缺陷", in)
+		}
 	}
 }
 

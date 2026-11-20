@@ -103,6 +103,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
@@ -125,7 +126,12 @@ const providerName = "meoo"
 //	real release takes the next number — ship.ps1 refuses a tag that is not on
 //	HEAD. Nothing about the tree differs from what 2026.11.13.1 would have been.)
 //	2026.11.16.1: 积分条改画「剩下的」（与 loomy 面板同向），汇总条同口径。
-var version = "2026.11.16.1"
+//	2026.11.20.1: 截断改为码点安全。`truncate` 用 `s[:n]`（字节下标）切，而它切的是
+//	operator 面对的中文文本（账号备注 label、身份显示名、上游错误、panic 详情）；
+//	3 字节的汉字被切开后经 encoding/json 变成 U+FFFD 进卡片/日志。现在回退到前一个
+//	码点边界（truncateUTF8Bytes），字节上限不变，结果永远合法 UTF-8；
+//	clampProjectName 同样改为按码点切（64 字节上限不变，不再把半个汉字 POST 给上游）。
+var version = "2026.11.20.1"
 
 var hostAPI *C.cliproxy_host_api
 
@@ -452,12 +458,53 @@ func errorEnvelopeFor(err error) []byte {
 
 // truncate bounds a string for a log line or an envelope. Credentials are never
 // passed through here; this is for notes and diagnostics.
+//
+// 2026-11-20: the cut now lands on a rune boundary (truncateUTF8Bytes) instead of
+// a byte index. Callers here hand in operator-facing prose — the account label
+// (a human note), the identity display name, upstream error text, panic details —
+// and the old "…" bound split CJK/emoji runs in half.
 func truncate(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return truncateUTF8Bytes(s, n) + "…"
+}
+
+// truncateUTF8Bytes cuts s to at most limit BYTES, at a rune boundary.
+//
+// Why not s[:limit]: this is the shape that cut CJK notes in half elsewhere in
+// the fleet (workbuddy A9, qoder/zcode note cards). A CJK rune is 3 bytes and an
+// emoji is 4, so a byte index regularly lands INSIDE a rune; the tail bytes are
+// then an orphan, encoding/json serializes them as U+FFFD, and the replacement
+// character travels into the card / credential file and survives every later
+// rewrite of the same text. Backing off to the previous rune start is the smaller
+// loss: the byte ceiling (the thing that keeps a card to one line) is unchanged,
+// and the result is always valid UTF-8.
+//
+// limit <= 0 yields "". A limit of at least utf8.UTFMax bytes always keeps one
+// whole character rather than collapsing to "" — a caller that re-bounds a value
+// must not be able to shrink it into nothing.
+func truncateUTF8Bytes(s string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	// The guarantee above, stated as a guard rather than as an observation: with
+	// limit >= UTFMax a valid string can always spare one whole character, so a
+	// walk-to-zero (only reachable for malformed input) must not return "".
+	if cut == 0 && limit >= utf8.UTFMax {
+		if _, size := utf8.DecodeRuneInString(s); size > 1 && size <= limit {
+			cut = size
+		}
+	}
+	return s[:cut]
 }
 
 // nowTimestamp renders the fleet's wire format for a wall-clock stamp:

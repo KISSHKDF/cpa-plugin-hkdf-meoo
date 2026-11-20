@@ -3,7 +3,7 @@
 CPA (CLIProxyAPI) plugin — a read-only 秒悟 (Meoo) panel: points, plan, the project
 each key owns, and the project-level AK the model gateway wants.
 
-**Current version**: `2026.11.13.2` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
+**Current version**: `2026.11.20.1` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
 
 ## What it is
 

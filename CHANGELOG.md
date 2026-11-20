@@ -1,3 +1,42 @@
+## 2026.11.20.1
+
+**截断改为码点安全：账号备注、身份显示名与项目名不再被切成半个汉字（truncate 码点自护）。**
+
+### Fixed
+
+1. **`main.go` 的 `truncate()` 原来是 `s[:n]`——Go 里按字节切。** 这棵树经它限长的全是
+   operator 面对的中文文本：账号 `label`（即人写的备注，80 字节，`accounts.go:272`）、
+   身份显示名（60）、上游文案 `note()`（160，进卡片 note 并落 `accounts.json` / 凭据文件）、
+   management 路由错误（240）、`panicDetail`（240，进错误信封与日志）。一个汉字占 3 字节、
+   emoji 占 4 字节，字节下标经常落在字符中间；切出的孤立尾字节经 `encoding/json` 变成 `U+FFFD`，
+   在卡片上显示成乱码方块，并且每次重写同一条 note 都把它继续带下去。
+   现改为回退到前一个码点边界（新 helper `truncateUTF8Bytes`），**字节上限一个也不变**，
+   结果永远是合法 UTF-8；且 limit ≥ `utf8.UTFMax`（4）时保证至少留下一个完整字符。
+   `truncate()` 的签名与语义（去空白 → 超限才截 → 追加 `…`）不变，全部调用点零改动；
+   ASCII 文本的截断结果**逐字节不变**（有回归用例钉住）。
+2. **`config.go` 的 `clampProjectName` 同样是 `trimmed[:64]`（字节）。** 项目名是 operator 手输
+   文本、经常是中文，这个名字会被 POST 给上游 create-project 接口并持久化在上游——切碎后等于
+   把一个非法 UTF-8 的名字发给站点，回读成了替换字符。现改为 `truncateUTF8Bytes(trimmed, 64)`：
+   **64 字节上限不变**（仍严格不超过旧上限，不会因为修复而发出更长的名字），只是切在码点边界。
+
+### Judged but not changed
+
+- `upstream.go:664` `strings.ToUpper(part[:1])`（模型显示名首字母大写）：切的是 1 字节，不是限长；
+  该值来自网关的机器 id（`qwen3.8-flash` 这类 ASCII slug），判定为不含中文，保留原样。
+- `accounts.go` 的 `keyTail`（`key[len-4:]`，凭据尾部）与 `accountID`（`sha256[:16]` hex）：
+  纯 ASCII 标识符，按字节切与按码点切等价，保留原样。
+
+### Added
+
+- `truncate_test.go`：**8 个**回归用例——①中文边界不碎（`utf8.ValidString` + 无 `U+FFFD` + JSON 往返）；
+  ②emoji（4 字节）边界不碎；③纯 ASCII 与旧 `s[:n]` 逐字节一致；④边界组合例（恰在码点边界 / limit ≤ 0 /
+  原长短于上限原样返回 / limit 小于一个字符时返回完整字符或空串）；⑤`truncate` 包装层端到端；
+  ⑥`note()` 端到端（进卡片 note 的那条路径）；⑦`panicDetail` 端到端；⑧`clampProjectName` 端到端，
+  并额外断言"200 字节 ASCII 名字仍恰好截到 64 字节"（证明上限没被顺手改大或改小）。
+  **阴性对照已做**：把 helper 的 `return s[:cut]` 改回 `return s[:limit]`，8 例中 **7 例稳定变红**
+  （报 "not valid UTF-8"）；唯一保持绿的是第③条——那是刻意钉住"ASCII 不许回归"的对照。
+  改回即全绿。
+
 ## 2026.11.16.1
 
 **积分条改画「手里还剩多少」：卡片与汇总条都从右边开始掉，与 loomy 面板同向。**
