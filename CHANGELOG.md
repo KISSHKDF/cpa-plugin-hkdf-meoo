@@ -1,4 +1,19 @@
-## 2026.11.21.8
+## 2026.11.21.9
+
+**workbuddy 对齐批次①（审计 2026-11-22）：修好 `make test` + build_entry 三道钉 + README 版本行追平。**
+
+### Fixed
+
+- **`make test` 假入口**：共享 Makefile 模板的 `test:` 目标调 `scripts/build-ng.ps1 -TestOnly`，但本树 param 块只声明了 `$Version/$Out`——`make test` 一调就死于命名参数错误（workbuddy 2026.11.21.3 修的同款缺陷；2026-11-22 全舰队实测 12 棵在役树 8 棵带这对断腿）。修复照抄 workbuddy：param 补 `[switch]$TestOnly`，主体在代理环境设置后短路到 `go test -count=1 ./...`，不出构件。实跑验证通过。
+- **附带修复**：脚本 BOM 在编辑中丢失——已恢复单 BOM，check-powershell-entry 门禁过。
+- **README 版本行追平**：`2026.11.21.3` → `2026.11.21.9`（审计 #2 的漂移项）。
+- 角色澄清随审计落档：本插件树是**只读面板插件**（能力面仅 ManagementAPI，无 chat 流量），按主人「不走用户请求不列无用功能」裁定，反代类基线对本树不适用。
+
+### Added
+
+- **新增 `build_entry_test.go` 三道 source pin**（照 workbuddy 2026.11.21.3 同款）：TestOnly 参数在位+短路真跑 / -Version 与 VERSION 不一致必须 throw / gcc 前置检查报错文案在位。
+
+
 
 **汇总卡与账号卡转「今日口径」，名称/算法与 workbuddy 逐字对齐（主人裁定：连名称也要对齐）（2026-11-21）。**
 

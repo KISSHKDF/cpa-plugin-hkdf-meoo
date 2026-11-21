@@ -21,6 +21,13 @@
 # Usage:  powershell -File build-ng.ps1 [-Version 0.2.1-v8.0] [-Out name.dll]
 param(
     [string]$Version = "",
+    # 2026.11.21.9 (workbuddy 对齐批次): `make test` calls this script with
+    # -TestOnly — the shared Makefile template has done so all along, but this
+    # tree's param block never declared it, so `make test` died on a bogus
+    # named-parameter error (workbuddy fixed the same shape in its 2026.11.21.3;
+    # audited 2026-11-22: 8 of 12 in-service trees shipped the broken pair).
+    # Test-only mode runs the full go test suite and exits without building.
+    [switch]$TestOnly,
     [string]$Out = ""
 )
 # 2026-10-23 目录规范化：本脚本从树根移到 scripts\，所以 $PSScriptRoot 是 scripts\。
@@ -54,6 +61,21 @@ $env:GOPROXY = 'off'
 $env:GOFLAGS = '-mod=mod'
 foreach ($n in 'HTTP_PROXY','HTTPS_PROXY','http_proxy','https_proxy','ALL_PROXY','all_proxy') {
     Remove-Item "Env:$n" -ErrorAction SilentlyContinue
+}
+
+# 2026.11.21.9 (workbuddy 对齐批次): -TestOnly runs the full test suite and
+# exits — no artifact, no build gates. `make test` in this tree's Makefile
+# calls exactly this (same shape as workbuddy 2026.11.21.3).
+if ($TestOnly) {
+    Push-Location $root
+    try {
+        & $go test -count=1 ./...
+        if ($LASTEXITCODE -ne 0) { throw 'go test failed' }
+        Write-Host '[TestOnly] go test -count=1 ./... passed (no artifact built)'
+    } finally {
+        Pop-Location
+    }
+    return
 }
 
 Push-Location $root
