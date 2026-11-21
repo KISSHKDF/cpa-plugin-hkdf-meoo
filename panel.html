@@ -598,6 +598,7 @@ function card(a){
     +   '</div>'
     +   '<div class="cd-ops">'+pill+dlPill
     +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="claimOne(this)" title="立即为这个账号尝试领取每日登录赠送积分（2,000 分）。用的是本机浏览器里已有的登录态，不存密码、不填短信。">领每日积分</button>'
+    +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="askPasteSession(this)" title="浏览器里的会话读不到时（浏览器开着会锁住 cookie 文件），可以在这里粘一段 meoo.com 的 Cookie。保存前会核对它是不是这个账号的会话。">粘会话</button>'
     +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="askRemove(this)" title="只从本插件的账号文件里删掉这一行；CPA 配置与秒悟账号本身都不动。">移除</button>'
     +   '</div>'
     + '</div>'
@@ -732,6 +733,39 @@ function claimAll(btn){
     toast('领取失败', 'err', e.message);
   }).then(function(){
     if(btn){ btn.disabled = false; btn.innerHTML = was; }
+  });
+}
+
+/* ---------- 粘会话（浏览器读不到时的退路）---------- */
+/* 浏览器开着的时候，Chromium 会锁住自己的 cookie 文件，插件就读不到那个会话。
+   这时可以让操作者自己从 DevTools 复制一段 Cookie 粘过来。
+   后端会先核对「这段会话是不是这个账号的」，不是就拒绝保存。 */
+function askPasteSession(btn){
+  var id = btn && btn.getAttribute('data-id');
+  if(!id){ toast('缺少账号 id', 'err', ''); return; }
+  var label = (lastPayload && (lastPayload.accounts||[]).filter(function(a){return a.id===id;})[0]||{}).label || id;
+  var body = '<div class="hint">给账号 <b>'+esc(label)+'</b> 粘一段 meoo.com 的 Cookie。<br>'
+    + '浏览器登录 meoo.com 后，按 F12 → Application → Cookies → meoo.com，把整段 Cookie（或至少 '
+    + '<code>oneday_sid</code>、<code>login_oneday_ticket</code> 及其 <code>.sig</code>）复制过来。<br>'
+    + '只存本机，插件不发送、不外传；保存前会核对这段会话确实属于这个账号。</div>'
+    + '<input id="sessionCookieInput" type="password" class="field-input" placeholder="Cookie" autocomplete="off" style="width:100%">';
+  openModal('粘会话 Cookie', body, '<button type="button" class="sec" onclick="closeModal()">取消</button><button type="button" onclick="saveSessionCookie(this,\''+esc(id)+'\')">保存</button>');
+}
+
+function saveSessionCookie(btn, id){
+  var input = $('sessionCookieInput');
+  var cookie = input ? String(input.value||'').trim() : '';
+  if(!cookie){ toast('没有内容', 'err', '请先粘贴 Cookie'); return; }
+  btn.disabled = true;
+  return api(BASE + '/daily-login/session', {method:'POST', body: JSON.stringify({account_id:id, cookie:cookie})}).then(function(d){
+    if(d && d.error){ toast('保存失败', 'err', d.error); return; }
+    toast('会话已保存', 'ok', '现在可以点「领每日积分」');
+    closeModal();
+    return load(false, null);
+  }).catch(function(e){
+    toast('保存失败', 'err', e.message);
+  }).then(function(){
+    btn.disabled = false;
   });
 }
 

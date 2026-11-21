@@ -185,7 +185,15 @@ func runDailyLoginSweep(now time.Time, onlyAccountID string) dailyLoginSweepSumm
 		parked := dailyLoginStateFor(account.ID)
 		// Once per business day per account: a parked outcome for today means the
 		// attempt already happened.
-		if parked.BusinessDay == summary.Day && parked.Outcome != "" && parked.Outcome != claimFailed {
+		//
+		// EXCEPT "needs_login": the operator has not logged in yet, so the day is
+		// NOT over for that account. A later attempt (the sweep runs hourly, and
+		// the operator can press the button) must be allowed to pick it up — the
+		// moment they log in, the plugin should claim the day's 2,000 without
+		// waiting for tomorrow. Blocking the whole day on a missing login would
+		// silently cost the operator a day's points.
+		if parked.BusinessDay == summary.Day && parked.Outcome != "" &&
+			parked.Outcome != claimFailed && parked.Outcome != claimNeedsLogin {
 			if parked.Outcome == claimGranted {
 				summary.Granted++
 			} else if parked.Outcome == claimAlready {

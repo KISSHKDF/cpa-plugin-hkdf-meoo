@@ -65,6 +65,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -107,9 +108,16 @@ var sessionCookieNames = map[string]bool{
 // (operator must log in once) and "session expired" (profile exists, cookie is
 // stale) call for different advice.
 var (
-	errNoSessionProfile = errors.New("no session profile for this account")
-	errSessionExpired   = errors.New("the stored web session is no longer valid")
+	errNoSessionProfile = errors.New("本机没有该账号已登录的浏览器会话")
+	errSessionExpired   = errors.New("保存的网页会话已失效")
 )
+
+// sessionHint is what the operator is told when a session cannot be used.
+//
+// It is a plain sentence, not an internal error string: this text lands in the
+// panel and in the log, and a Go error like "no session profile for this account:
+// …" is noise to the person who has to act on it.
+const sessionHint = "请在浏览器里登录 meoo.com（阿里云账号），插件会自动复用那个会话；本插件不保存密码、不填短信。"
 
 // sessionProfile is one browser profile on this machine.
 type sessionProfile struct {
@@ -163,10 +171,43 @@ var sessionProfileForFn = func(accountID string) (sessionProfile, error) {
 	return sessionProfile{Dir: dir, CookiePath: cookiePath, LocalStatePath: localState}, nil
 }
 
-// listSessionProfiles enumerates every profile directory on this machine. Used by
-// the identity sweep, which has to consider profiles whose directory name does
-// not match any account (a renamed profile, a leftover from another key).
+// listSessionProfiles enumerates every profile directory worth asking.
+//
+// Two families, in this order:
+//
+//  1. the operator's own per-account Edge profiles under
+//     %USERPROFILE%\.meoo-cpa\edge-profile\<account id> — the layout this
+//     plugin's daily-login script uses;
+//  2. the NORMAL browser profiles (Edge / Chrome / Brave …) — because the
+//     operator may well have logged into 秒悟 in their everyday browser rather
+//     than in a dedicated profile. Measured 2026-11-21: account 「好看的风」 had
+//     exactly such a session and was invisible to the first family alone.
+//
+// The second family is read ONLY, and only to find a session; nothing is written
+// to any browser profile.
 func listSessionProfiles() []sessionProfile {
+	var out []sessionProfile
+	seen := map[string]bool{}
+	for _, profile := range listDedicatedProfiles() {
+		if seen[profile.Dir] {
+			continue
+		}
+		seen[profile.Dir] = true
+		out = append(out, profile)
+	}
+	for _, profile := range listBrowserProfiles() {
+		if seen[profile.Dir] {
+			continue
+		}
+		seen[profile.Dir] = true
+		out = append(out, profile)
+	}
+	return out
+}
+
+// listDedicatedProfiles enumerates the per-account profiles this plugin's own
+// tooling creates.
+func listDedicatedProfiles() []sessionProfile {
 	root := sessionProfileRoot()
 	if root == "" {
 		return nil
@@ -181,28 +222,87 @@ func listSessionProfiles() []sessionProfile {
 			continue
 		}
 		dir := filepath.Join(root, entry.Name())
-		cookiePath := filepath.Join(dir, "Default", "Network", "Cookies")
-		localState := filepath.Join(dir, "Local State")
-		if _, errCookie := os.Stat(cookiePath); errCookie != nil {
-			continue
+		if profile, ok := profileAt(dir); ok {
+			out = append(out, profile)
 		}
-		if _, errState := os.Stat(localState); errState != nil {
-			continue
-		}
-		out = append(out, sessionProfile{Dir: dir, CookiePath: cookiePath, LocalStatePath: localState})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Dir < out[j].Dir })
 	return out
 }
 
+// browserProfileRoots are the everyday browsers' user-data directories.
+//
+// They are probed read-only. A profile that does not exist is skipped silently.
+func browserProfileRoots() []string {
+	local := os.Getenv("LOCALAPPDATA")
+	if local == "" {
+		return nil
+	}
+	return []string{
+		filepath.Join(local, "Microsoft", "Edge", "User Data"),
+		filepath.Join(local, "Google", "Chrome", "User Data"),
+		filepath.Join(local, "BraveSoftware", "Brave-Browser", "User Data"),
+	}
+}
+
+// listBrowserProfiles enumerates the everyday browsers' profiles.
+//
+// Each browser keeps several profiles (the person, "Profile 1", "Work" …) and
+// Chromium writes the cookie store at <user data>\<profile>\Default\Network\Cookies
+// with the owning `Local State` two levels up.
+func listBrowserProfiles() []sessionProfile {
+	var out []sessionProfile
+	for _, root := range browserProfileRoots() {
+		if _, errStat := os.Stat(root); errStat != nil {
+			continue
+		}
+		entries, errRead := os.ReadDir(root)
+		if errRead != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			dir := filepath.Join(root, entry.Name())
+			if profile, ok := profileAt(dir); ok {
+				out = append(out, profile)
+			}
+		}
+	}
+	return out
+}
+
+// profileAt builds the profile description for one user-data directory, if it
+// really holds a Chromium cookie store and its `Local State`.
+func profileAt(dir string) (sessionProfile, bool) {
+	cookiePath := filepath.Join(dir, "Default", "Network", "Cookies")
+	localState := filepath.Join(dir, "Local State")
+	if _, errCookie := os.Stat(cookiePath); errCookie != nil {
+		return sessionProfile{}, false
+	}
+	if _, errState := os.Stat(localState); errState != nil {
+		return sessionProfile{}, false
+	}
+	return sessionProfile{Dir: dir, CookiePath: cookiePath, LocalStatePath: localState}, true
+}
+
 // readSessionCookie decrypts the Meoo cookies out of one profile and returns them
 // as a Cookie header value.
 //
-// The store may be LOCKED by a running browser (Chromium keeps it open); on
-// Windows the file is still readable with a shared read, which is what the
-// fleet's other Chromium reader does. A store that cannot be read is an error,
-// never an empty cookie: an empty cookie would look like "logged out" and hide
-// the real reason.
+// The store may be LOCKED by a running browser: Chromium keeps the cookie file
+// open, and on Windows an exclusive open makes a plain read fail with
+// "being used by another process". That is the normal state of an everyday
+// browser — the operator has Edge open while the plugin runs — so the file is
+// first copied through a SHARED read, which Windows permits while another
+// process holds the handle. The copy is what gets parsed; the original is never
+// touched.
+//
+// (Measured 2026-11-21: without the copy, the operator's normal Edge profile
+// read failed exactly this way and its 秒悟 session was invisible.)
+//
+// A store that still cannot be read is an error, never an empty cookie: an empty
+// cookie would look like "logged out" and hide the real reason.
 func readSessionCookie(profile sessionProfile) (string, error) {
 	return readSessionCookieFn(profile)
 }
@@ -210,11 +310,17 @@ func readSessionCookie(profile sessionProfile) (string, error) {
 // readSessionCookieFn is the seam: production decrypts the store, a test
 // substitutes a fixture cookie.
 var readSessionCookieFn = func(profile sessionProfile) (string, error) {
+	storePath, cleanup, errCopy := copyCookieStore(profile.CookiePath)
+	if errCopy != nil {
+		return "", fmt.Errorf("session cookie store: %w", errCopy)
+	}
+	defer cleanup()
+
 	aesKey, errKey := loadChromiumAESKey(profile.LocalStatePath)
 	if errKey != nil {
 		return "", fmt.Errorf("session key: %w", errKey)
 	}
-	db, errOpen := readSQLiteFile(profile.CookiePath)
+	db, errOpen := readSQLiteFile(storePath)
 	if errOpen != nil {
 		return "", fmt.Errorf("session cookie store: %w", errOpen)
 	}
@@ -249,6 +355,37 @@ var readSessionCookieFn = func(profile sessionProfile) (string, error) {
 		return "", fmt.Errorf("%w: no decodable Meoo cookie in %s", errSessionExpired, profile.Dir)
 	}
 	return strings.Join(pairs, "; "), nil
+}
+
+// copyCookieStore copies a Chromium cookie store to a temporary file that can be
+// read while the browser holds it open.
+//
+// The copy is what gets parsed; the original is never written to. The journal
+// file is copied too when it exists, because Chromium's rollback journal holds
+// the most recent writes that may not be in the main file yet.
+func copyCookieStore(path string) (string, func(), error) {
+	source, errOpen := openSharedRead(path)
+	if errOpen != nil {
+		return "", func() {}, errOpen
+	}
+	defer func() { _ = source.Close() }()
+
+	temp, errTemp := os.CreateTemp("", "meoo-cookies-*.db")
+	if errTemp != nil {
+		return "", func() {}, errTemp
+	}
+	tempPath := temp.Name()
+	cleanup := func() { _ = os.Remove(tempPath) }
+	if _, errCopy := io.Copy(temp, source); errCopy != nil {
+		_ = temp.Close()
+		cleanup()
+		return "", func() {}, errCopy
+	}
+	if errClose := temp.Close(); errClose != nil {
+		cleanup()
+		return "", func() {}, errClose
+	}
+	return tempPath, cleanup, nil
 }
 
 // isMeooCookieHost reports whether a cookie host key belongs to Meoo.

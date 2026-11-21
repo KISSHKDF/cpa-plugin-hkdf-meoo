@@ -411,7 +411,7 @@ func claimDailyLogin(account accountRecord, now time.Time) (dailyLoginAttempt, e
 	if errCookie != nil {
 		attempt.Outcome = claimNeedsLogin
 		attempt.State.Outcome = claimNeedsLogin
-		attempt.State.Note = note(errCookie.Error())
+		attempt.State.Note = sessionHint
 		return attempt, errCookie
 	}
 
@@ -426,8 +426,10 @@ func claimDailyLogin(account accountRecord, now time.Time) (dailyLoginAttempt, e
 		if errors.Is(errInit, errSessionExpired) {
 			attempt.Outcome = claimNeedsLogin
 			attempt.State.Outcome = claimNeedsLogin
+			attempt.State.Note = sessionHint
+		} else {
+			attempt.State.Note = note(errInit.Error())
 		}
-		attempt.State.Note = note(errInit.Error())
 		attempt.State.BalanceAfter = before.Available
 		return attempt, errInit
 	}
@@ -494,6 +496,16 @@ func sessionCookieFor(account accountRecord) (string, error) {
 	want := accountOpenID(account)
 	if want == "" {
 		return "", fmt.Errorf("%w: 无法读取账号的 open id，无法核对会话归属", errNoSessionProfile)
+	}
+	// 0. A cookie the operator pasted for this account wins: it is the one the
+	// operator chose, and it is the only route that works when the everyday
+	// browser holds its cookie store locked (an open browser does).
+	if pasted := strings.TrimSpace(account.SessionCookie); pasted != "" {
+		identity, errIdentity := fetchSessionIdentity(pasted)
+		if errIdentity == nil && identity.OpenID == want {
+			return pasted, nil
+		}
+		return "", fmt.Errorf("%w: 粘贴的会话与该账号不匹配", errSessionExpired)
 	}
 	// 1. The profile named after the account id.
 	if profile, errProfile := sessionProfileFor(account.ID); errProfile == nil {

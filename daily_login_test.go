@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 // -----------------------------------------------------------------------------
@@ -263,6 +265,171 @@ func TestSessionCookieIsAcceptedForTheMatchingAccount(t *testing.T) {
 	}
 	if cookie == "" {
 		t.Fatal("no cookie returned")
+	}
+}
+
+// -----------------------------------------------------------------------------
+// The stored session cookie
+// -----------------------------------------------------------------------------
+
+// TestSessionCookieIsStoredAndNeverEchoed pins the secrecy discipline of the
+// pasted-session route: the cookie goes into the account file and comes back
+// only as a boolean.
+func TestSessionCookieIsStoredAndNeverEchoed(t *testing.T) {
+	isolateMeoo(t)
+	record, errAdd := addAccount(fakeUserKey, "夹具")
+	if errAdd != nil {
+		t.Fatalf("add account: %v", errAdd)
+	}
+	if errSave := setAccountSessionCookie(record.ID, "oneday_sid=secret-value; login_oneday_ticket=secret2"); errSave != nil {
+		t.Fatalf("save session: %v", errSave)
+	}
+	raw, errRead := os.ReadFile(accountsPath())
+	if errRead != nil {
+		t.Fatalf("read store: %v", errRead)
+	}
+	if !strings.Contains(string(raw), "oneday_sid") {
+		t.Fatal("the session cookie was not stored")
+	}
+	// The stored cookie must never reach the panel payload.
+	view := buildView(false)
+	encoded, errMarshal := json.Marshal(view)
+	if errMarshal != nil {
+		t.Fatalf("marshal: %v", errMarshal)
+	}
+	for _, forbidden := range []string{"secret-value", "oneday_sid", "login_oneday_ticket"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("the panel payload carries %q", forbidden)
+		}
+	}
+}
+
+// TestReaddingTheSameKeyKeepsTheStoredSession pins that re-adding a key (a
+// paste mistake, a label change) does not silently drop the session — that
+// would cost the operator the daily reward without any visible cause.
+func TestReaddingTheSameKeyKeepsTheStoredSession(t *testing.T) {
+	isolateMeoo(t)
+	record, errAdd := addAccount(fakeUserKey, "夹具")
+	if errAdd != nil {
+		t.Fatalf("add account: %v", errAdd)
+	}
+	if errSave := setAccountSessionCookie(record.ID, "oneday_sid=keep-me"); errSave != nil {
+		t.Fatalf("save session: %v", errSave)
+	}
+	if _, errAgain := addAccount(fakeUserKey, "改名了"); errAgain != nil {
+		t.Fatalf("re-add account: %v", errAgain)
+	}
+	stored, errFind := findAccount(record.ID)
+	if errFind != nil {
+		t.Fatalf("find account: %v", errFind)
+	}
+	if !strings.Contains(stored.SessionCookie, "keep-me") {
+		t.Fatal("re-adding the key dropped the stored session")
+	}
+}
+
+// TestClearingTheSessionRemovesIt pins the DELETE route's effect.
+func TestClearingTheSessionRemovesIt(t *testing.T) {
+	isolateMeoo(t)
+	record, errAdd := addAccount(fakeUserKey, "夹具")
+	if errAdd != nil {
+		t.Fatalf("add account: %v", errAdd)
+	}
+	if errSave := setAccountSessionCookie(record.ID, "oneday_sid=x"); errSave != nil {
+		t.Fatalf("save session: %v", errSave)
+	}
+	if errClear := setAccountSessionCookie(record.ID, ""); errClear != nil {
+		t.Fatalf("clear session: %v", errClear)
+	}
+	stored, errFind := findAccount(record.ID)
+	if errFind != nil {
+		t.Fatalf("find account: %v", errFind)
+	}
+	if stored.SessionCookie != "" {
+		t.Fatalf("the session was not cleared: %q", stored.SessionCookie)
+	}
+}
+
+// TestAPastedSessionIsAcceptedOnlyForItsOwnAccount pins the identity check on
+// the paste route: a cookie belonging to another account must be refused.
+func TestAPastedSessionIsAcceptedOnlyForItsOwnAccount(t *testing.T) {
+	isolateMeoo(t)
+	fake := newMeooFakeUpstream(t)
+	fake.aim(t)
+	fake.sessionOpenID = "999999999999999" // some other account
+
+	record, errAdd := addAccount(fakeUserKey, "夹具")
+	if errAdd != nil {
+		t.Fatalf("add account: %v", errAdd)
+	}
+	resp := saveSessionCookieResponse(pluginapi.ManagementRequest{
+		Body: []byte(`{"account_id":"` + record.ID + `","cookie":"oneday_sid=fake"}`),
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (the cookie belongs to another account)", resp.StatusCode)
+	}
+	stored, errFind := findAccount(record.ID)
+	if errFind != nil {
+		t.Fatalf("find account: %v", errFind)
+	}
+	if stored.SessionCookie != "" {
+		t.Fatal("a cookie for another account was stored")
+	}
+}
+
+// TestNeedsLoginIsRetriedOnTheSameDay pins the retry policy.
+//
+// "needs_login" means the OPERATOR has not logged in yet — the day is not over
+// for that account. Blocking the whole day would silently cost the operator a
+// day's 2,000 points; the sweep must be allowed to pick it up once they log in.
+func TestNeedsLoginIsRetriedOnTheSameDay(t *testing.T) {
+	isolateMeoo(t)
+	fake := newMeooFakeUpstream(t)
+	fake.aim(t)
+	fake.responseClaimsGrant = true
+	fake.ledgerMovesOnInit = true
+
+	record, errAdd := addAccount(fakeUserKey, "夹具")
+	if errAdd != nil {
+		t.Fatalf("add account: %v", errAdd)
+	}
+	// Park a "needs login" outcome for today.
+	today := businessDay(time.Now())
+	setDailyLoginState(record.ID, dailyLoginState{BusinessDay: today, Outcome: claimNeedsLogin})
+
+	installFakeSession(t, record.ID, fake)
+	summary := runDailyLoginSweep(time.Now(), "")
+	if summary.Attempted != 1 {
+		t.Fatalf("attempted = %d, want 1 (a needs_login account must be retried)", summary.Attempted)
+	}
+	if summary.Granted != 1 {
+		t.Fatalf("granted = %d, want 1", summary.Granted)
+	}
+}
+
+// TestASuccessfulClaimIsNotRetriedOnTheSameDay is the counterpart: a claimed
+// account must NOT be attempted again the same day.
+func TestASuccessfulClaimIsNotRetriedOnTheSameDay(t *testing.T) {
+	isolateMeoo(t)
+	fake := newMeooFakeUpstream(t)
+	fake.aim(t)
+	fake.responseClaimsGrant = true
+	fake.ledgerMovesOnInit = true
+
+	record, errAdd := addAccount(fakeUserKey, "夹具")
+	if errAdd != nil {
+		t.Fatalf("add account: %v", errAdd)
+	}
+	today := businessDay(time.Now())
+	setDailyLoginState(record.ID, dailyLoginState{BusinessDay: today, Outcome: claimGranted, GrantedAmount: 2000})
+
+	installFakeSession(t, record.ID, fake)
+	summary := runDailyLoginSweep(time.Now(), "")
+	if summary.Attempted != 0 {
+		t.Fatalf("attempted = %d, want 0", summary.Attempted)
+	}
+	if fake.initCalls != 0 {
+		t.Fatalf("the grant endpoint was called %d times for an already-claimed account", fake.initCalls)
 	}
 }
 

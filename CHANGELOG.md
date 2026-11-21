@@ -1,3 +1,50 @@
+## 2026.11.21.2
+
+**每日登录赠送积分的三个补丁（2026-11-21，首版 2026.11.21.1 上线后的实机反馈）。**
+
+### Fixed
+
+1. **「需要人工登录」不能把当天锁死。**
+   首版把 `needs_login` 也算成「今天已经尝试过」，于是 operator 就算后来在浏览器里登了、
+   插件也不会再试一次 —— 当天的 2,000 分就白扔了，而且**没有任何提示**。
+   现在 `needs_login` 不占用当天：后台轮与手动按钮都会继续再试，
+   operator 登录完就能被领到（`TestNeedsLoginIsRetriedOnTheSameDay` 钉住）。
+
+2. **operator 看到的是英文内部错误串。**
+   `no session profile for this account: 本机没有属于该账号的已登录浏览器会话…`
+   这种句子出现在面板和日志里，对要动手处理的人毫无帮助。
+   现改为一句人话：**「请在浏览器里登录 meoo.com（阿里云账号），插件会自动复用那个会话；
+   本插件不保存密码、不填短信。」**
+
+3. **读浏览器 cookie 库时的锁。**
+   Chromium 开着的时候会用独占方式持有自己的 cookie 文件，普通读法直接失败
+   （`being used by another process`）。现改为**用共享读方式打开**（`FILE_SHARE_READ|WRITE|DELETE`，
+   只读，绝不写浏览器 profile），再把内容复制到临时文件解析。
+   （Windows 上浏览器进程仍可能持锁不放，此时该 profile 读不到 —— 这是平台限制，
+   不是插件能绕过的；退路见下条「粘会话」。）
+
+### Added
+
+4. **「粘会话」退路：浏览器读不到时可以手工粘一段 Cookie。**
+   新增两条管理路由：`POST /plugins/meoo/daily-login/session`（保存，account_id + cookie）
+   与 `DELETE /plugins/meoo/daily-login/session`（清除）。
+   **保存前必须核对身份**：这段会话要能被秒悟接受，且它的 `open_id` 必须等于该账号的
+   `open_id` —— 不是这个账号的会话一律拒绝保存（`TestAPastedSessionIsAcceptedOnlyForItsOwnAccount`）。
+   Cookie 与用户级 key 同等对待：只存本机账号文件，**永不在任何响应里回显**
+   （`TestSessionCookieIsStoredAndNeverEchoed`）。面板每行多一个「粘会话」按钮。
+   重新粘贴同一个 key **不会**丢掉已存的会话（`TestReaddingTheSameKeyKeepsTheStoredSession`）。
+
+5. **会话来源多一处：operator 平常用的浏览器。**
+   首版只扫 `%USERPROFILE%\.meoo-cpa\edge-profile\<账号id>`（本插件自己那套）。
+   现同时扫描 Edge / Chrome / Brave 的日常 profile（**只读**），按身份认领。
+   实测：账号「好看的风」正是在日常 Edge 里登的，首版看不到它。
+
+### Verification
+
+- 单元与回归测试全绿；新增 2 项变异测试确认用例真能拦住回归：
+  把 `needs_login` 改回「当天锁死」、去掉会话存盘的保密纪律。
+- 实机 live 测试仍全绿（读真 Edge profile、身份自动匹配、今天已领过的账号如实报 `already`）。
+
 ## 2026.11.21.1
 
 **新增「每日登录赠送积分」自动领取：每天自动领秒悟的 2,000 分（2026-11-21）。**

@@ -107,6 +107,8 @@ func managementRegistration() managementRegistrationResponse {
 			{Method: "POST", Path: base + "/cache/reset", Description: "Drop the cached readings and the cached catalogue so the next read goes upstream. Never touches the accounts."},
 			{Method: "POST", Path: base + "/daily-login", Description: "立即领取每日积分: attempt Meoo's daily 2,000-point login reward for every account (or one named by account_id), using the web session already stored in this machine's browser profile."},
 			{Method: "GET", Path: base + "/daily-login", Description: "The daily-login reward state per account: today's outcome, the amount granted and when the batch became effective. No upstream calls."},
+			{Method: "POST", Path: base + "/daily-login/session", Description: "Store a pasted Meoo web-session cookie for one account (the credential the daily reward needs). It is verified against the account's identity before it is stored, and never echoed back."},
+			{Method: "DELETE", Path: base + "/daily-login/session", Description: "Drop the stored web-session cookie of one account (account_id). The account itself is untouched."},
 			{Method: "GET", Path: base + "/health", Description: "Plugin version, host ABI latch, effective refresh window and both file paths. Zero upstream calls."},
 		},
 		Resources: []resourceRoute{
@@ -177,9 +179,102 @@ func handleManagement(raw []byte) ([]byte, error) {
 		return okEnvelope(jsonResponse(http.StatusOK, dailyLoginResponse(req)))
 	case method == "GET" && path == "/daily-login":
 		return okEnvelope(jsonResponse(http.StatusOK, dailyLoginStatusView()))
+	case method == "POST" && path == "/daily-login/session":
+		return okEnvelope(jsonResponse(http.StatusOK, saveSessionCookieResponse(req)))
+	case method == "DELETE" && path == "/daily-login/session":
+		return okEnvelope(jsonResponse(http.StatusOK, clearSessionCookieResponse(req)))
 	default:
 		return okEnvelope(jsonResponse(http.StatusNotFound, map[string]any{"error": "not found: " + path}))
 	}
+}
+
+// saveSessionCookieResponse stores a pasted web-session cookie for one account.
+//
+// The cookie is the credential the daily 2,000-point reward needs (the
+// open-platform key cannot trigger it). It is stored in the account file with
+// the same discipline as the key itself: never echoed back.
+//
+// The cookie is VERIFIED before it is stored: it must be a live session AND it
+// must belong to that account (its open_id must match the account's). A cookie
+// that does not verify is refused, so the store never holds a credential that
+// silently does the wrong thing.
+func saveSessionCookieResponse(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	var body struct {
+		AccountID string `json:"account_id"`
+		Cookie    string `json:"cookie"`
+	}
+	if len(req.Body) > 0 {
+		_ = json.Unmarshal(req.Body, &body)
+	}
+	if strings.TrimSpace(body.AccountID) == "" {
+		body.AccountID = req.Query.Get("account_id")
+	}
+	if strings.TrimSpace(body.Cookie) == "" {
+		body.Cookie = req.Query.Get("cookie")
+	}
+	accountID := strings.TrimSpace(body.AccountID)
+	cookie := strings.TrimSpace(body.Cookie)
+	if accountID == "" || cookie == "" {
+		return jsonResponse(http.StatusBadRequest, unifiedPayload(false, map[string]any{
+			"error": "需要 account_id 与 cookie 两个参数",
+		}))
+	}
+	account, errAccount := findAccount(accountID)
+	if errAccount != nil {
+		return jsonResponse(http.StatusNotFound, unifiedPayload(false, map[string]any{
+			"error": "找不到这个账号：" + accountID,
+		}))
+	}
+	want := accountOpenID(account)
+	identity, errIdentity := fetchSessionIdentity(cookie)
+	if errIdentity != nil {
+		return jsonResponse(http.StatusBadRequest, unifiedPayload(false, map[string]any{
+			"error": "这个会话不被秒悟接受：" + note(errIdentity.Error()),
+		}))
+	}
+	if want != "" && identity.OpenID != want {
+		return jsonResponse(http.StatusBadRequest, unifiedPayload(false, map[string]any{
+			"error": "这个会话属于另一个账号（open_id 不匹配），已拒绝保存",
+		}))
+	}
+	if errSave := setAccountSessionCookie(accountID, cookie); errSave != nil {
+		return jsonResponse(http.StatusInternalServerError, unifiedPayload(false, map[string]any{
+			"error": note(errSave.Error()),
+		}))
+	}
+	return jsonResponse(http.StatusOK, unifiedPayload(false, map[string]any{
+		"daily_login": map[string]any{
+			"session_saved": true,
+			"account_id":    accountID,
+			"identity":      identity.Username,
+		},
+		"message": "会话已保存；点「领每日积分」即可用它领取今日的赠送积分。",
+	}))
+}
+
+// clearSessionCookieResponse drops a stored session cookie for one account.
+func clearSessionCookieResponse(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	accountID := strings.TrimSpace(req.Query.Get("account_id"))
+	if accountID == "" && len(req.Body) > 0 {
+		var body struct {
+			AccountID string `json:"account_id"`
+		}
+		_ = json.Unmarshal(req.Body, &body)
+		accountID = strings.TrimSpace(body.AccountID)
+	}
+	if accountID == "" {
+		return jsonResponse(http.StatusBadRequest, unifiedPayload(false, map[string]any{
+			"error": "需要 account_id 参数",
+		}))
+	}
+	if errClear := setAccountSessionCookie(accountID, ""); errClear != nil {
+		return jsonResponse(http.StatusInternalServerError, unifiedPayload(false, map[string]any{
+			"error": note(errClear.Error()),
+		}))
+	}
+	return jsonResponse(http.StatusOK, unifiedPayload(false, map[string]any{
+		"message": "已清除该账号保存的会话。",
+	}))
 }
 
 // dailyLoginResponse runs the daily-login reward sweep on demand.

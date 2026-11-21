@@ -3,7 +3,7 @@
 CPA (CLIProxyAPI) plugin — a read-only 秒悟 (Meoo) panel: points, plan, the project
 each key owns, and the project-level AK the model gateway wants.
 
-**Current version**: `2026.11.21.1` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
+**Current version**: `2026.11.21.2` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
 
 ## What it is
 
@@ -70,6 +70,12 @@ be booked against an overdraft repayment (measured: +2,000 immediately offset by
 −472), so the judgement belongs on the batches, not on the balance.
 
 Set `daily_login: false` to stop the plugin from reading any browser profile.
+
+**When the browser route cannot reach the session** — Chromium holds its cookie
+store locked while it runs, so an open everyday browser may be unreadable — the
+operator can paste the session by hand (`POST /plugins/meoo/daily-login/session`,
+or the **粘会话** button on each card). The cookie is verified against the
+account's identity before it is stored and is never echoed back.
 
 ## Two credential families, never interchangeable
 
@@ -150,6 +156,8 @@ declared config surface.
 | GET | `/v0/management/plugins/meoo/models` | gateway catalogue, unusable models marked |
 | POST | `/v0/management/plugins/meoo/daily-login` | 立即领取每日积分: attempt the daily 2,000-point reward (all accounts, or one named by `account_id`) |
 | GET | `/v0/management/plugins/meoo/daily-login` | the daily-reward state per account. Zero upstream calls |
+| POST | `/v0/management/plugins/meoo/daily-login/session` | store a pasted web-session cookie for one account; verified against that account's identity, never echoed |
+| DELETE | `/v0/management/plugins/meoo/daily-login/session` | drop the stored web-session cookie of one account |
 | POST | `/v0/management/plugins/meoo/cache/reset` | drop cached readings + catalogue |
 | GET | `/v0/management/plugins/meoo/health` | version, ABI latch, window, paths |
 

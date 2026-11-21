@@ -93,6 +93,8 @@ func TestManagementRoutesAreExactlyTheAgreedSurface(t *testing.T) {
 		"POST /plugins/meoo/cache/reset",
 		"POST /plugins/meoo/daily-login",
 		"GET /plugins/meoo/daily-login",
+		"POST /plugins/meoo/daily-login/session",
+		"DELETE /plugins/meoo/daily-login/session",
 		"GET /plugins/meoo/health",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {

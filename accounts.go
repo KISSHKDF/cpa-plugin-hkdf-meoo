@@ -83,7 +83,19 @@ type accountRecord struct {
 	// just to reach the gateway. ProjectAK is a project-level key. Secret.
 	ProjectURLID string `json:"project_url_id,omitempty"`
 	ProjectAK    string `json:"project_ak,omitempty"`
-	AddedAt      string `json:"added_at,omitempty"`
+	// SessionCookie is the WEB SESSION cookie for this account — the credential
+	// the daily 2,000-point login reward needs (the open-platform key cannot
+	// trigger it; see daily_login.go).
+	//
+	// It is OPTIONAL: when it is empty the plugin looks for a logged-in browser
+	// profile on this machine (session_cookie.go). It is stored only when the
+	// operator pastes one, for the case where the browser route cannot reach the
+	// session — e.g. the everyday browser holds its cookie store locked while it
+	// runs, which is the normal state of an open browser.
+	//
+	// Secret: never echoed. The panel shows only whether one is present.
+	SessionCookie string `json:"session_cookie,omitempty"`
+	AddedAt       string `json:"added_at,omitempty"`
 }
 
 // keyTail is the only part of a secret that may be echoed.
@@ -289,6 +301,10 @@ func addAccount(userKey, label string) (accountRecord, error) {
 			record.ProjectURLID = file.Accounts[i].ProjectURLID
 			record.ProjectAK = file.Accounts[i].ProjectAK
 			record.AddedAt = file.Accounts[i].AddedAt
+			// The stored web session belongs to the ACCOUNT, not to the key
+			// paste: re-adding the same key must not drop it (that would silently
+			// cost the operator the daily reward).
+			record.SessionCookie = file.Accounts[i].SessionCookie
 			if label == "" {
 				record.Label = file.Accounts[i].Label
 			}
@@ -335,6 +351,51 @@ func removeAccount(id string) (bool, error) {
 		return false, errWrite
 	}
 	return true, nil
+}
+
+// findAccount returns one stored account by id.
+func findAccount(id string) (accountRecord, error) {
+	id = strings.TrimSpace(id)
+	accounts, errList := listAccounts()
+	if errList != nil {
+		return accountRecord{}, errList
+	}
+	for _, record := range accounts {
+		if record.ID == id {
+			return record, nil
+		}
+	}
+	return accountRecord{}, fmt.Errorf("no account with id %q", id)
+}
+
+// setAccountSessionCookie stores (or clears, with an empty value) the web-session
+// cookie for one account.
+//
+// The cookie is a secret: it is written to the account file with the same
+// discipline as the key and is never echoed back.
+func setAccountSessionCookie(id, cookie string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New("id is required")
+	}
+	accountsMu.Lock()
+	defer accountsMu.Unlock()
+	file, errRead := readAccountsFile()
+	if errRead != nil {
+		return errRead
+	}
+	found := false
+	for i := range file.Accounts {
+		if file.Accounts[i].ID == id {
+			file.Accounts[i].SessionCookie = strings.TrimSpace(cookie)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("no account with id %q", id)
+	}
+	return writeAccountsFile(file)
 }
 
 // recordProject stores what the discovery walk learned about one account's
