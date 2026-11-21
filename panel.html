@@ -587,6 +587,14 @@ function card(a){
             : dlOutcome==='needs_login' ? '<span class="cd-pill dead" title="'+esc(String(dl.note||'需要人工登录'))+'">待登录</span>'
             : dlOutcome==='failed' ? '<span class="cd-pill stale" title="'+esc(String(dl.note||'本次未领取到'))+'">今日未领</span>'
             : '<span class="cd-pill" title="插件会在每天零点后自动尝试领取">未尝试</span>';
+  /* 会话寿命（每 30 天一次的人工登录）：到期前 7 天内变黄色，过期变红色。
+     这是「到期前提醒」—— 会话悄悄死掉 = 一天的积分悄悄丢掉。 */
+  var ses = a.web_session || {};
+  var sesDays = Number(ses.days_left);
+  var sesPill = !ses.found ? '<span class="cd-pill dead" title="没有找到该账号的登录会话">无会话</span>'
+            : sesDays < 0 ? '<span class="cd-pill dead" title="会话已于 '+esc(ses.expires_at)+' 过期，重新登录即可续上">会话过期</span>'
+            : sesDays < 7 ? '<span class="cd-pill stale" title="'+esc(ses.hint||'')+'">剩 '+sesDays+' 天</span>'
+            : '<span class="cd-pill" title="'+esc(ses.hint||'')+'">会话 '+sesDays+' 天</span>';
   var dlNote = dl.note ? '<div class="cd-msg'+(dlOutcome==='failed'||dlOutcome==='needs_login'?' err':'')+'" title="'+esc(dl.note)+'">'+esc(dl.note)+'</div>' : '';
 
   return '<div class="cd-card'+(dead?' cd-dead':'')+'" data-in-cpa="'+esc(cpaVerdict(a))+'" data-state="'+(dead?'dead':(stale?'stale':'ok'))+'">'
@@ -596,8 +604,9 @@ function card(a){
     +     cpaBadge(cpaVerdict(a))
     +     identBadge
     +   '</div>'
-    +   '<div class="cd-ops">'+pill+dlPill
+    +   '<div class="cd-ops">'+pill+dlPill+sesPill
     +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="claimOne(this)" title="立即为这个账号尝试领取每日登录赠送积分（2,000 分）。用的是本机浏览器里已有的登录态，不存密码、不填短信。">领每日积分</button>'
+    +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="openLoginWindow(this)" title="打开这个账号专用的 Edge 登录窗（停在 meoo.com）。在窗口里登录一次，会话落在专用目录里，插件就能自动领积分。会话每 30 天过期一次，过期前点这个按钮重新登录即可。">登录</button>'
     +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="askPasteSession(this)" title="浏览器里的会话读不到时（浏览器开着会锁住 cookie 文件），可以在这里粘一段 meoo.com 的 Cookie。保存前会核对它是不是这个账号的会话。">粘会话</button>'
     +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="askRemove(this)" title="只从本插件的账号文件里删掉这一行；CPA 配置与秒悟账号本身都不动。">移除</button>'
     +   '</div>'
@@ -731,6 +740,27 @@ function claimAll(btn){
     return load(false, null);
   }).catch(function(e){
     toast('领取失败', 'err', e.message);
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.innerHTML = was; }
+  });
+}
+
+/* ---------- 打开登录窗（每 30 天一次的人工登录）---------- */
+/* 秒悟的发放只认网页会话，会话 30 天过期且不能自动续。
+   这个按钮打开该账号专用的 Edge 登录窗：在窗口里登录一次，会话落进专用目录，
+   插件立刻就能自动领积分。之后每次过期前，面板会提前 7 天把胶囊变黄提醒。 */
+function openLoginWindow(btn){
+  if(!getKey()){ showAuth(); return; }
+  var id = btn && btn.getAttribute('data-id');
+  if(!id){ toast('缺少账号 id', 'err', ''); return; }
+  var was = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '打开中…'; }
+  return api(BASE + '/daily-login/login-window', {method:'POST', body: JSON.stringify({account_id:id})}).then(function(d){
+    if(d && d.error){ toast('打不开登录窗', 'err', d.error); return; }
+    var lw = (d && d.login_window) || {};
+    toast('登录窗已打开', 'ok', lw.hint || '在窗口里登录 meoo.com，登录成功后回来点「领每日积分」');
+  }).catch(function(e){
+    toast('打不开登录窗', 'err', e.message);
   }).then(function(){
     if(btn){ btn.disabled = false; btn.innerHTML = was; }
   });

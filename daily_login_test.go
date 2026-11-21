@@ -434,6 +434,83 @@ func TestASuccessfulClaimIsNotRetriedOnTheSameDay(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
+// Session expiry (the "tell the operator BEFORE it dies" half)
+// -----------------------------------------------------------------------------
+
+// TestSessionExpiryReadsTheRealProfile is the live gate on the expiry reader.
+//
+// The WebKit epoch offset (1601 vs 1970) is the classic four-centuries-off bug;
+// a wrong offset shows up as "remaining days ≈ 65 million" or a wildly negative
+// number, and this test pins the sane range against a REAL profile.
+func TestSessionExpiryReadsTheRealProfile(t *testing.T) {
+	if !liveEnabled() {
+		t.Skip("live test: set MEOO_LIVE_TEST=1 to run")
+	}
+	profiles := listSessionProfiles()
+	for _, profile := range profiles {
+		expiry := sessionExpiryOf(profile)
+		if !expiry.Found {
+			t.Logf("profile %s: no session cookie", filepath.Base(profile.Dir))
+			continue
+		}
+		// A real Chromium cookie expiry is bounded: a WebKit-offset bug puts it
+		// centuries away, and a parse bug often yields zero or negative.
+		if expiry.DaysLeft < -1 || expiry.DaysLeft > 400 {
+			t.Errorf("profile %s: days_left = %.1f — outside any plausible session lifetime (epoch bug?)",
+				filepath.Base(profile.Dir), expiry.DaysLeft)
+		}
+		if expiry.ExpiresAt == "" {
+			t.Errorf("profile %s: Found=true but no expiry date", filepath.Base(profile.Dir))
+		}
+		t.Logf("profile %s: expires %s (%.1f days)", filepath.Base(profile.Dir), expiry.ExpiresAt, expiry.DaysLeft)
+	}
+}
+
+// TestLoginWindowHintCoversEveryState pins the operator-facing hint: every
+// session state needs a sentence a human can act on.
+func TestLoginWindowHintCoversEveryState(t *testing.T) {
+	account := accountRecord{Label: "夹具"}
+	cases := []sessionExpiry{
+		{Found: false},
+		{Found: true, DaysLeft: -1, ExpiresAt: "2026-11-20 03:28"},
+		{Found: true, DaysLeft: 3, ExpiresAt: "2026-11-24 03:28"},
+		{Found: true, DaysLeft: 25, ExpiresAt: "2026-12-16 03:28"},
+	}
+	for _, expiry := range cases {
+		hint := loginWindowHintFor(account, expiry)
+		if strings.TrimSpace(hint) == "" {
+			t.Errorf("expiry %+v has no hint", expiry)
+		}
+	}
+	// The dead and the dying must read differently: "expired" asks for a
+	// re-login NOW, "3 days left" asks for one soon.
+	if strings.Contains(loginWindowHintFor(account, cases[1]), "还剩") {
+		t.Error("an expired session must not be described as having days left")
+	}
+	if !strings.Contains(loginWindowHintFor(account, cases[2]), "尽快") {
+		t.Error("a session with <7 days must urge a re-login")
+	}
+}
+
+// TestOpenLoginWindowRefusesRepeatedClicks pins the double-click guard: two
+// windows on one user-data-dir fight over its lock, and Edge refuses the second.
+func TestOpenLoginWindowRefusesRepeatedClicks(t *testing.T) {
+	// The guard reads lastLoginWindowAt directly: simulate a click a second ago.
+	isolateMeoo(t)
+	account := accountRecord{ID: "fixture-account", Label: "夹具"}
+	loginWindowLock.Lock()
+	lastLoginWindowAt[account.ID] = time.Now().Add(-2 * time.Second)
+	loginWindowLock.Unlock()
+	message, errLaunch := openLoginWindow(account)
+	if errLaunch != nil {
+		t.Fatalf("the guard must not error, it must explain: %v", errLaunch)
+	}
+	if !strings.Contains(message, "10 秒") {
+		t.Fatalf("the double-click guard message lost its explanation: %q", message)
+	}
+}
+
+// -----------------------------------------------------------------------------
 // The pure decisions — no network at all
 // -----------------------------------------------------------------------------
 

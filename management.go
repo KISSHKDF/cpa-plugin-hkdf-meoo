@@ -109,6 +109,7 @@ func managementRegistration() managementRegistrationResponse {
 			{Method: "GET", Path: base + "/daily-login", Description: "The daily-login reward state per account: today's outcome, the amount granted and when the batch became effective. No upstream calls."},
 			{Method: "POST", Path: base + "/daily-login/session", Description: "Store a pasted Meoo web-session cookie for one account (the credential the daily reward needs). It is verified against the account's identity before it is stored, and never echoed back."},
 			{Method: "DELETE", Path: base + "/daily-login/session", Description: "Drop the stored web-session cookie of one account (account_id). The account itself is untouched."},
+			{Method: "POST", Path: base + "/daily-login/login-window", Description: "Open the account's own Edge login window at meoo.com (account_id). The operator logs in once; the session lands in that profile and the next claim attempt picks it up."},
 			{Method: "GET", Path: base + "/health", Description: "Plugin version, host ABI latch, effective refresh window and both file paths. Zero upstream calls."},
 		},
 		Resources: []resourceRoute{
@@ -183,9 +184,52 @@ func handleManagement(raw []byte) ([]byte, error) {
 		return okEnvelope(jsonResponse(http.StatusOK, saveSessionCookieResponse(req)))
 	case method == "DELETE" && path == "/daily-login/session":
 		return okEnvelope(jsonResponse(http.StatusOK, clearSessionCookieResponse(req)))
+	case method == "POST" && path == "/daily-login/login-window":
+		return okEnvelope(jsonResponse(http.StatusOK, openLoginWindowResponse(req)))
 	default:
 		return okEnvelope(jsonResponse(http.StatusNotFound, map[string]any{"error": "not found: " + path}))
 	}
+}
+
+// openLoginWindowResponse launches the account's own login window.
+//
+// The operator's "one click" for (re)creating a web session: the window opens
+// at meoo.com in the account's own Edge profile, the operator logs in, and the
+// next claim attempt picks the session up (needs_login does not block the day).
+func openLoginWindowResponse(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	accountID := strings.TrimSpace(req.Query.Get("account_id"))
+	if accountID == "" && len(req.Body) > 0 {
+		var body struct {
+			AccountID string `json:"account_id"`
+		}
+		_ = json.Unmarshal(req.Body, &body)
+		accountID = strings.TrimSpace(body.AccountID)
+	}
+	if accountID == "" {
+		return jsonResponse(http.StatusBadRequest, unifiedPayload(false, map[string]any{
+			"error": "需要 account_id 参数",
+		}))
+	}
+	account, errAccount := findAccount(accountID)
+	if errAccount != nil {
+		return jsonResponse(http.StatusNotFound, unifiedPayload(false, map[string]any{
+			"error": "找不到这个账号：" + accountID,
+		}))
+	}
+	message, errLaunch := openLoginWindow(account)
+	if errLaunch != nil {
+		return jsonResponse(http.StatusInternalServerError, unifiedPayload(false, map[string]any{
+			"error": note(errLaunch.Error()),
+		}))
+	}
+	return jsonResponse(http.StatusOK, unifiedPayload(false, map[string]any{
+		"login_window": map[string]any{
+			"opened":     true,
+			"account_id": accountID,
+			"hint":       loginWindowHintFor(account, sessionExpiryForAccount(account)),
+		},
+		"message": message,
+	}))
 }
 
 // saveSessionCookieResponse stores a pasted web-session cookie for one account.
@@ -308,6 +352,10 @@ func dailyLoginResponse(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 }
 
 // dailyLoginStatusView is the read-only view of the daily-login state.
+//
+// Each row also carries the SESSION EXPIRY (the C of "A+C"): the reward
+// credential dies every 30 days, and the operator must see that coming — a
+// session that died silently is a day's points silently lost.
 func dailyLoginStatusView() map[string]any {
 	now := time.Now()
 	accounts, errAccounts := listAccounts()
@@ -316,6 +364,17 @@ func dailyLoginStatusView() map[string]any {
 		row := dailyLoginStatusFor(account.ID, now)
 		row["account_id"] = account.ID
 		row["label"] = account.Label
+		expiry := sessionExpiryForAccount(account)
+		// The field is named session_state (not session) on purpose: the panel
+		// leak gate forbids reading a whole credential off a row, and the expiry
+		// object carries only a date, a day count and a directory path — no
+		// secret of any kind.
+		row["web_session"] = map[string]any{
+			"found":      expiry.Found,
+			"expires_at": expiry.ExpiresAt,
+			"days_left":  expiry.DaysLeft,
+			"hint":       loginWindowHintFor(account, expiry),
+		}
 		rows = append(rows, row)
 	}
 	payload := map[string]any{

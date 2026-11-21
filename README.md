@@ -3,7 +3,7 @@
 CPA (CLIProxyAPI) plugin — a read-only 秒悟 (Meoo) panel: points, plan, the project
 each key owns, and the project-level AK the model gateway wants.
 
-**Current version**: `2026.11.21.2` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
+**Current version**: `2026.11.21.3` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
 
 ## What it is
 
@@ -58,6 +58,16 @@ The reader is the one the 灵犀 tree already proved on this box (`sqlite_min.go
 form is automated. The operator logs in once, by hand, in their own browser; the
 plugin then reuses that session. A dead session is reported as *需要人工登录* —
 never as a claim.
+
+**Sessions expire every 30 days** (measured: a 11-16 login dies 12-16, and daily
+calls do not extend it). Meoo's server accepts only a web session for the grant —
+the open-platform key answers `API_KEY_ROUTE_FORBIDDEN` on the grant endpoint, an
+OAuth token answers `NEED_LOGIN` (both measured) — so "never expires" like
+workbuddy's refresh tokens is not on offer. What the plugin does instead:
+
+- **each row shows the session's remaining days** (yellow under 7, red when dead);
+- **the 登录 button opens the account's own Edge profile at meoo.com** — one
+  click, log in, done; the next sweep picks the session up the same day.
 
 **Which profile belongs to which account** is settled by identity, not by a
 maintained table: the open platform reports `account.userId` and the web session
@@ -158,6 +168,7 @@ declared config surface.
 | GET | `/v0/management/plugins/meoo/daily-login` | the daily-reward state per account. Zero upstream calls |
 | POST | `/v0/management/plugins/meoo/daily-login/session` | store a pasted web-session cookie for one account; verified against that account's identity, never echoed |
 | DELETE | `/v0/management/plugins/meoo/daily-login/session` | drop the stored web-session cookie of one account |
+| POST | `/v0/management/plugins/meoo/daily-login/login-window` | open the account's own Edge login window at meoo.com (one click before a session expires) |
 | POST | `/v0/management/plugins/meoo/cache/reset` | drop cached readings + catalogue |
 | GET | `/v0/management/plugins/meoo/health` | version, ABI latch, window, paths |
 

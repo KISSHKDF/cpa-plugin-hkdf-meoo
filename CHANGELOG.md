@@ -1,3 +1,43 @@
+## 2026.11.21.3
+
+**会话到期提醒 + 一键登录窗（A+C 方案的 C；A 的前提实测不成立，如实记录）（2026-11-21）。**
+
+先说 A 为什么没做：主人问「能不能像 workbuddy 一样账号永不过期」。为此把所有凭据通道实测了一遍
+（2026-11-21，全部结论有探测脚本佐证）：
+
+- **开放平台 AK 不能触发发放**：`GET /api/mc/entitlement/init` 回 401 `API_KEY_ROUTE_FORBIDDEN`
+  （带 `X-Meoo-Client: cli` 时）/ 401 `API_KEY_CLIENT_REQUIRED`（不带时）—— 服务器认得 CLI 头但
+  明确禁止 AK 走这个接口；26 个候选端点全 404。
+- **OAuth PKCE 可以纯 HTTP 三步自动完成**（GET /oauth/authorize 抠 `request_id` →
+  POST /oauth/authorize/decision 带 `decision=approve` → 302 带 code → /oauth/token），
+  实测拿到 refresh_token 且**可续期**——但它打 init 回 401 `NEED_LOGIN`：OAuth 令牌不是网页登录态，
+  **读账永不过期可以，领分不行**。
+- **阿里云 SSO 自动续期也不行**：profile 里的长寿阿里云 cookie（`login_current_pk` 360 天、
+  `tfstk` 175 天）不构成 SSO 登录态 —— 带/不带 cookie，`account.aliyun.com/sso/login.htm`
+  返回的页面一字不差（只有 CSRF nonce 不同），都是登录表单。
+
+**结论：秒悟在服务端就把发放锁死在网页会话上，而网页会话 30 天必过期（实测 11-16 登录 →
+12-16 到期，每天调用不续期）。永不过期做不了；能做到的是「每次都自动续上、人只管登录」。**
+
+### Added（C 方案本体）
+
+1. **会话到期提醒**（`sessionExpiryOf` / `sessionExpiryForAccount`）：从该账号 profile 的
+   cookie 库读 `oneday_sid` 的到期时间（只读时间戳列，无需解密）。面板每行多一枚会话胶囊：
+   `会话 24.9 天`（正常）→ 7 天内变黄 `剩 3.2 天` → 过期变红 `会话过期` → 从未登录 `无会话`。
+   WebKit 纪元偏移（1601 vs 1970）是经典差 400 年的坑，live 测试对真 profile 钉住合理区间。
+2. **一键登录窗**（`login_window_windows.go` + `POST /plugins/meoo/daily-login/login-window`）：
+   用该账号自己的 Edge profile（`%USERPROFILE%\.meoo-cpa\edge-profile\<账号id>`）拉起 Edge 停在
+   meoo.com。operator 在窗口里登录一次，会话落进专用目录，插件下一次尝试（后台每小时一轮、
+   或面板按钮）立刻接上 —— `needs_login` 不占用当天（2026.11.21.2 已修）。不跑无头、不在命令行
+   传凭据、不碰别的 profile；10 秒内重复点击只提示不重开（同一 user-data-dir 双实例会争锁）。
+   管理面新路由与面板「登录」按钮同步登记。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- live 测试：到期读取器对真 profile 读出 24.9 天（与脚本直测一致）；2 个 profile 身份匹配不变。
+- goroutine 守卫抓到一处裸 `go func()`（登录窗的 detach 等待），已改走 `safeGo` —— 门禁体系按设计工作。
+
 ## 2026.11.21.2
 
 **每日登录赠送积分的三个补丁（2026-11-21，首版 2026.11.21.1 上线后的实机反馈）。**

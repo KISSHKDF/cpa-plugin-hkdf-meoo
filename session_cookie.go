@@ -66,10 +66,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // sessionProfileRootEnvVar redirects the profile root (tests, non-standard
@@ -394,4 +397,117 @@ func isMeooCookieHost(host string) bool {
 	host = strings.ToLower(strings.TrimSpace(host))
 	host = strings.TrimPrefix(host, ".")
 	return host == meooCookieHost
+}
+
+// -----------------------------------------------------------------------------
+// Session expiry — the C of "A+C": tell the operator BEFORE the session dies
+// -----------------------------------------------------------------------------
+
+// webKitEpochOffset is the difference between the Windows FILETIME epoch
+// (1601-01-01) and the Unix epoch, in seconds. Chromium stores cookie expiry in
+// FILETIME microseconds; getting this wrong shifts every expiry by four
+// centuries.
+const webKitEpochOffset = 11644473600
+
+// sessionExpiry is how much of a session is left, as the panel shows it.
+type sessionExpiry struct {
+	// Found is false when the profile holds no session cookie at all — the
+	// account has never been logged in (or the store is unreadable).
+	Found bool `json:"found"`
+	// ExpiresAt is the session cookie's expiry, "2026-12-16 03:28" (local).
+	ExpiresAt string `json:"expires_at,omitempty"`
+	// DaysLeft is how many days remain, one decimal. Negative = already expired.
+	DaysLeft float64 `json:"days_left,omitempty"`
+	// ProfileDir names where the session lives, so the operator knows which
+	// browser window carries it.
+	ProfileDir string `json:"profile_dir,omitempty"`
+}
+
+// sessionExpiryOf reads the session cookie's expiry from one profile's store.
+//
+// It reads ONLY the expiry timestamp — no decryption needed for this (the
+// expiry column is plaintext in the store), so it works even when the value
+// would not decrypt.
+//
+// The COOKIE DB of a RUNNING browser may be locked (see copyCookieStore); an
+// unreadable store reports Found=false rather than guessing a date.
+func sessionExpiryOf(profile sessionProfile) sessionExpiry {
+	out := sessionExpiry{}
+	storePath, cleanup, errCopy := copyCookieStore(profile.CookiePath)
+	if errCopy != nil {
+		return out
+	}
+	defer cleanup()
+	db, errOpen := readSQLiteFile(storePath)
+	if errOpen != nil {
+		return out
+	}
+	rows, errRows := db.sqliteReadTable("cookies")
+	if errRows != nil {
+		return out
+	}
+	// The session id is the credential that matters; its expiry IS the session's
+	// expiry. (The ticket lives slightly longer but the site needs both, and the
+	// id dies first.)
+	for _, row := range rows {
+		host := strings.TrimSpace(row["host_key"].string())
+		name := strings.TrimSpace(row["name"].string())
+		if !isMeooCookieHost(host) || name != "oneday_sid" {
+			continue
+		}
+		raw := strings.TrimSpace(row["expires_utc"].string())
+		if raw == "" {
+			continue
+		}
+		micro, errParse := strconv.ParseInt(raw, 10, 64)
+		if errParse != nil || micro <= 0 {
+			continue
+		}
+		expires := time.Unix(micro/1_000_000-webKitEpochOffset, 0)
+		days := time.Until(expires).Hours() / 24
+		out = sessionExpiry{
+			Found:      true,
+			ExpiresAt:  expires.Format("2006-01-02 15:04"),
+			DaysLeft:   math.Round(days*10) / 10,
+			ProfileDir: profile.Dir,
+		}
+		return out
+	}
+	return out
+}
+
+// sessionExpiryForAccount resolves the expiry for one account: its own profile
+// first, then any profile on the machine whose session belongs to it (matched
+// by identity, same as the claim path).
+//
+// The identity sweep reads live sessions only (a dead session cannot answer who
+// it is), so an EXPIRED profile is reported from its own directory — that is
+// exactly the case the warning exists for.
+func sessionExpiryForAccount(account accountRecord) sessionExpiry {
+	if profile, errProfile := sessionProfileFor(account.ID); errProfile == nil {
+		if expiry := sessionExpiryOf(profile); expiry.Found {
+			return expiry
+		}
+	}
+	// Fall through to a name-only match across every known profile: the
+	// dedicated profile layout uses the account id as the directory name, and a
+	// directory named after this account whose session belongs to another
+	// account would mislead — so only directories that still decrypt AND answer
+	// with this account's identity are trusted here. The cheap path: reuse the
+	// same profile list, decrypt each store, and keep the first whose session
+	// matches.
+	for _, profile := range listSessionProfiles() {
+		cookie, errCookie := readSessionCookie(profile)
+		if errCookie != nil {
+			continue
+		}
+		identity, errIdentity := fetchSessionIdentity(cookie)
+		if errIdentity != nil {
+			continue
+		}
+		if want := accountOpenID(account); want != "" && identity.OpenID == want {
+			return sessionExpiryOf(profile)
+		}
+	}
+	return sessionExpiry{}
 }
