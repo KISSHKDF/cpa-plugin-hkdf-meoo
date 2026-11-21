@@ -538,6 +538,15 @@ type accountView struct {
 	Stale          bool     `json:"stale"`
 	AgeSeconds     int64    `json:"age_seconds"`
 	LastRefreshAt  *string  `json:"last_refresh_at"`
+
+	// DailyLogin is the state of today's 2,000-point login reward for this
+	// account: the outcome (granted / already / failed / needs_login), how many
+	// points arrived and when the batch became effective.
+	//
+	// It is a nested object rather than two flat fields because the operator's
+	// question is "did today's 2,000 arrive, and if not why not" — and the answer
+	// is a small record, not a scalar.
+	DailyLogin map[string]any `json:"daily_login,omitempty"`
 }
 
 // meooSummary is the header of the panel.
@@ -659,6 +668,10 @@ func assembleView(refreshed int, cacheOnly bool) map[string]any {
 				missingProjectAK++
 			}
 		}
+		// The daily-login state is attached for every row, claimed or not: the
+		// operator must be able to see that today's reward did NOT arrive, not
+		// just that it did.
+		view.DailyLogin = dailyLoginStatusFor(account.ID, now)
 		rows = append(rows, view)
 	}
 	if summary.Readable > 0 {

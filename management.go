@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -104,6 +105,8 @@ func managementRegistration() managementRegistrationResponse {
 			{Method: "POST", Path: base + "/accounts/remove", Description: "Remove one stored account by id. Never touches CPA's config or the Meoo account itself."},
 			{Method: "GET", Path: base + "/models", Description: "The model gateway catalogue for the first account that owns a project-level AK, with unusable models marked and explained."},
 			{Method: "POST", Path: base + "/cache/reset", Description: "Drop the cached readings and the cached catalogue so the next read goes upstream. Never touches the accounts."},
+			{Method: "POST", Path: base + "/daily-login", Description: "立即领取每日积分: attempt Meoo's daily 2,000-point login reward for every account (or one named by account_id), using the web session already stored in this machine's browser profile."},
+			{Method: "GET", Path: base + "/daily-login", Description: "The daily-login reward state per account: today's outcome, the amount granted and when the batch became effective. No upstream calls."},
 			{Method: "GET", Path: base + "/health", Description: "Plugin version, host ABI latch, effective refresh window and both file paths. Zero upstream calls."},
 		},
 		Resources: []resourceRoute{
@@ -170,9 +173,65 @@ func handleManagement(raw []byte) ([]byte, error) {
 		}))
 	case method == "GET" && path == "/health":
 		return okEnvelope(jsonResponse(http.StatusOK, healthReport()))
+	case method == "POST" && path == "/daily-login":
+		return okEnvelope(jsonResponse(http.StatusOK, dailyLoginResponse(req)))
+	case method == "GET" && path == "/daily-login":
+		return okEnvelope(jsonResponse(http.StatusOK, dailyLoginStatusView()))
 	default:
 		return okEnvelope(jsonResponse(http.StatusNotFound, map[string]any{"error": "not found: " + path}))
 	}
+}
+
+// dailyLoginResponse runs the daily-login reward sweep on demand.
+//
+// The operator's trigger: 「立即领取每日积分」. It runs for every account, or for
+// one when `account_id` is given.
+//
+// The answer keeps the unified payload so the panel can re-render from one shape,
+// and it adds a `daily_login` block describing what the attempt did.
+func dailyLoginResponse(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	only := strings.TrimSpace(req.Query.Get("account_id"))
+	if only == "" && len(req.Body) > 0 {
+		var body struct {
+			AccountID string `json:"account_id"`
+		}
+		_ = json.Unmarshal(req.Body, &body)
+		only = strings.TrimSpace(body.AccountID)
+	}
+	summary := runDailyLoginSweep(time.Now(), only)
+	return jsonResponse(http.StatusOK, unifiedPayload(false, map[string]any{
+		"daily_login": map[string]any{
+			"day":         summary.Day,
+			"attempted":   summary.Attempted,
+			"granted":     summary.Granted,
+			"already":     summary.Already,
+			"failed":      summary.Failed,
+			"needs_login": summary.NeedsLog,
+			"at":          summary.At,
+		},
+	}))
+}
+
+// dailyLoginStatusView is the read-only view of the daily-login state.
+func dailyLoginStatusView() map[string]any {
+	now := time.Now()
+	accounts, errAccounts := listAccounts()
+	rows := make([]map[string]any, 0, len(accounts))
+	for _, account := range accounts {
+		row := dailyLoginStatusFor(account.ID, now)
+		row["account_id"] = account.ID
+		row["label"] = account.Label
+		rows = append(rows, row)
+	}
+	payload := map[string]any{
+		"day":     businessDay(now),
+		"enabled": currentDailyLogin(),
+		"rows":    rows,
+	}
+	if errAccounts != nil {
+		payload["error"] = note(errAccounts.Error())
+	}
+	return payload
 }
 
 // isResourceRequest reports whether the FULL path arrived through the browser's

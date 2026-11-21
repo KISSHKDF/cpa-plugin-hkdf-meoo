@@ -3,7 +3,7 @@
 CPA (CLIProxyAPI) plugin — a read-only 秒悟 (Meoo) panel: points, plan, the project
 each key owns, and the project-level AK the model gateway wants.
 
-**Current version**: `2026.11.20.1` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
+**Current version**: `2026.11.21.1` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
 
 ## What it is
 
@@ -24,12 +24,52 @@ This plugin supplies the missing numbers:
 | project | `…/cli-compat/projects` → `…/{url_id}/cloud` → `…/cloud/environment` |
 | project-level AK | `…/cloud/environment` → `meooProjectApiKey` |
 | model catalogue | `https://api.meoo.host/meoo-ai/compatible-mode/v1/models` |
+| **daily 2,000-point login reward** | `https://meoo.com/api/mc/entitlement/init` (web session) |
 
 Reads are cached (default 60 minutes) and served to the panel from that cache, so
 opening or polling the panel costs no upstream calls. The **刷新数据** button forces
 one walk; a background tick does the same on the configured period. Only two calls
 write anything upstream (create project / enable cloud), and both are gated by
 `auto_provision`.
+
+## The daily 2,000-point login reward
+
+秒悟 grants every user **2,000 points on their first login of the day** (six days
+valid). There is no claim button and no claim endpoint — the grant is issued by
+`GET /api/mc/entitlement/init`, which the official web app calls on every load.
+The open-platform key (`meoo_ak_…`) can read the balance but **calling it does not
+log in and does not grant**: an account whose key was polled daily accumulated no
+grant, an account that opened the site did.
+
+So the reward needs the **web session cookie**. This plugin obtains it from the
+operator's own browser profile on this machine:
+
+```
+%USERPROFILE%\.meoo-cpa\edge-profile\<account id>\Default\Network\Cookies
+```
+
+Chromium's classic `v10` scheme is unwrapped with the profile's own
+`Local State` key (DPAPI, CurrentUser scope — only the Windows user who owns the
+profile can read it, which is also why the credential never leaves this machine).
+The reader is the one the 灵犀 tree already proved on this box (`sqlite_min.go`,
+`chromium_cookie.go`, `dpapi_windows.go`); no new dependency, no cgo.
+
+**What it does not do**: no password is stored, no SMS code is requested, no login
+form is automated. The operator logs in once, by hand, in their own browser; the
+plugin then reuses that session. A dead session is reported as *需要人工登录* —
+never as a claim.
+
+**Which profile belongs to which account** is settled by identity, not by a
+maintained table: the open platform reports `account.userId` and the web session
+reports `open_id`, and they are the same number for the same person.
+
+**How a claim is judged**: the account's own points ledger, before and after. A new
+「登录赠送积分」 batch means the points arrived. The endpoint's own
+`dailyLoginGranted` field is recorded but never believed on its own — a grant can
+be booked against an overdraft repayment (measured: +2,000 immediately offset by
+−472), so the judgement belongs on the batches, not on the balance.
+
+Set `daily_login: false` to stop the plugin from reading any browser profile.
 
 ## Two credential families, never interchangeable
 
@@ -92,6 +132,7 @@ plugins:
             refresh_minutes: 60      # 1..1440, cache TTL and background period
             auto_provision: true     # create a project / enable its cloud when missing
             project_name: CPA-Model-Gateway   # name used when one is created
+            daily_login: true        # claim the daily 2,000-point login reward
 ```
 
 `enabled` is also honoured (default true) but is deliberately not part of the
@@ -107,6 +148,8 @@ declared config surface.
 | POST | `/v0/management/plugins/meoo/accounts/add` | store one user-level key + optional label |
 | POST | `/v0/management/plugins/meoo/accounts/remove` | drop one row by id |
 | GET | `/v0/management/plugins/meoo/models` | gateway catalogue, unusable models marked |
+| POST | `/v0/management/plugins/meoo/daily-login` | 立即领取每日积分: attempt the daily 2,000-point reward (all accounts, or one named by `account_id`) |
+| GET | `/v0/management/plugins/meoo/daily-login` | the daily-reward state per account. Zero upstream calls |
 | POST | `/v0/management/plugins/meoo/cache/reset` | drop cached readings + catalogue |
 | GET | `/v0/management/plugins/meoo/health` | version, ABI latch, window, paths |
 
@@ -124,6 +167,12 @@ The full key is **never** echoed: rows carry `id` (sha256 prefix), `key_tail` an
 | `config.go` | YAML parsing (base64 / string / nested block), defaults and clamps |
 | `accounts.go` | the account store: atomic write, key validation, tails and ids |
 | `upstream.go` | the open platform + gateway clients, the discovery chain, redaction |
+| `daily_login.go` | the daily 2,000-point reward: the grant call, the ledger judgement |
+| `daily_login_store.go` | where the reward outcome is parked, and who runs the sweep |
+| `session_cookie.go` | the web-session cookie: the browser profile, the reader |
+| `sqlite_min.go` | a tiny read-only SQLite b-tree reader (no cgo, no driver) |
+| `chromium_cookie.go` | Chromium v10 cookie decryption |
+| `dpapi_windows.go` | the Windows DPAPI half of that decryption |
 | `cache.go` | TTL cache, sweep, gateway-catalogue cache, panel view model |
 | `management.go` | route table, dispatch, payload builders, health |
 | `panel.go` | `//go:embed panel.html`, door regex, raw-HTML response |

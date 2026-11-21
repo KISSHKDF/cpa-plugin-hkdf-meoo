@@ -30,9 +30,13 @@ func isolateMeoo(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(accountsEnvVar, filepath.Join(dir, "accounts.json"))
 	t.Setenv(cacheEnvVar, filepath.Join(dir, "readings.json"))
+	t.Setenv(dailyLoginStoreEnvVar, filepath.Join(dir, "daily-login.json"))
+	t.Setenv(sessionProfileRootEnvVar, filepath.Join(dir, "profiles"))
 	resetCacheForTest()
 	resetAccountsForTest()
 	resetConfigForTest()
+	resetDailyLoginStatesForTest()
+	resetAccountOpenIDCacheForTest()
 
 	// A port that was just closed: any accidental walk is refused instantly, and
 	// nothing leaves the machine.

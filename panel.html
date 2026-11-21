@@ -204,6 +204,7 @@ table.ut td.num{text-align:right;font-variant-numeric:tabular-nums}
   </div>
   <div class="bar">
     <button id="refreshBtn" onclick="load(true,this)" title="立即重走每个账号的发现链（身份 → 项目 → 云服务 → 项目级 AK → 积分 → 权益），并重绘面板。积分查询不扣分。">刷新数据</button>
+    <button class="sec" onclick="claimAll(this)" title="为每个账号尝试领取今日的「每日登录赠送积分」（2,000 分）。插件会复用本机浏览器里已有的登录态，不存密码、不填短信。已经领过的账号不会重复领取。">领每日积分</button>
     <button class="sec" onclick="openUsage(this)" title="同一份载荷，只读缓存：零上游调用，每行带读数年龄。">读缓存</button>
     <button class="sec" onclick="openModels(this)" title="模型网关目录（项目级 AK），不可用的模型会被标出来。">模型</button>
     <button class="sec" onclick="askAdd(this)" title="粘贴一个用户级 meoo_ak_… key（可选备注）；key 只落本插件自己的账号文件。">加账号</button>
@@ -578,6 +579,15 @@ function card(a){
   var akText = akTail ? ('尾号 '+akTail) : '（没有）';
   if(akTail && akState && akState!=='ok') akText = '尾号 '+akTail+'（'+esc(akState)+'）';
   var note = a.note ? '<div class="cd-msg'+((dead||stale)?' err':'')+'" title="'+esc(a.note)+'">'+esc(a.note)+'</div>' : '';
+  /* 每日登录赠送积分（2,000/天）：状态来自后端，每行都带 —— 没领到也要看得见。 */
+  var dl = a.daily_login || {};
+  var dlOutcome = String(dl.outcome||'');
+  var dlPill = dlOutcome==='granted' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已领取'))+'">今日 +'+fmtNum(dl.granted_amount||2000)+'</span>'
+            : dlOutcome==='already' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已到账'))+'">今日已领</span>'
+            : dlOutcome==='needs_login' ? '<span class="cd-pill dead" title="'+esc(String(dl.note||'需要人工登录'))+'">待登录</span>'
+            : dlOutcome==='failed' ? '<span class="cd-pill stale" title="'+esc(String(dl.note||'本次未领取到'))+'">今日未领</span>'
+            : '<span class="cd-pill" title="插件会在每天零点后自动尝试领取">未尝试</span>';
+  var dlNote = dl.note ? '<div class="cd-msg'+(dlOutcome==='failed'||dlOutcome==='needs_login'?' err':'')+'" title="'+esc(dl.note)+'">'+esc(dl.note)+'</div>' : '';
 
   return '<div class="cd-card'+(dead?' cd-dead':'')+'" data-in-cpa="'+esc(cpaVerdict(a))+'" data-state="'+(dead?'dead':(stale?'stale':'ok'))+'">'
     + '<div class="cd-row1">'
@@ -586,7 +596,8 @@ function card(a){
     +     cpaBadge(cpaVerdict(a))
     +     identBadge
     +   '</div>'
-    +   '<div class="cd-ops">'+pill
+    +   '<div class="cd-ops">'+pill+dlPill
+    +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="claimOne(this)" title="立即为这个账号尝试领取每日登录赠送积分（2,000 分）。用的是本机浏览器里已有的登录态，不存密码、不填短信。">领每日积分</button>'
     +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="askRemove(this)" title="只从本插件的账号文件里删掉这一行；CPA 配置与秒悟账号本身都不动。">移除</button>'
     +   '</div>'
     + '</div>'
@@ -607,6 +618,7 @@ function card(a){
     +   '<div class="cd-mi"><span class="cd-lbl">项目级 AK</span><span class="cd-val">'+akText+'</span></div>'
     +   '<div class="cd-mi right"><span class="cd-lbl">key 尾号</span><span class="cd-val">'+esc(textOr(a.key_tail))+'</span></div>'
     + '</div>'
+    + dlNote
     + note
     + '</div>';
 }
@@ -676,6 +688,50 @@ function load(force, btn){
     }
   }).then(function(){
     if(force) busy(btn, false, '刷新数据');
+  });
+}
+
+/* ---------- 每日登录赠送积分 ---------- */
+/* 立即为某账号（或全部账号）尝试领取每日 2,000 分。
+   用的是本机浏览器里已有的登录态：插件不上传密码、不填短信、不建账号。
+   判据由后端定：账本上出现新的一笔「登录赠送积分」才算领到。 */
+function claimOne(btn){
+  if(!getKey()){ showAuth(); return; }
+  var id = btn && btn.getAttribute('data-id');
+  var was = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spin"></span>领取中…'; }
+  var url = BASE + '/daily-login' + (id ? '?account_id=' + encodeURIComponent(id) : '');
+  return api(url, {method:'POST'}).then(function(d){
+    var dl = (d && d.daily_login) || {};
+    if(d && d.error){ toast('领取失败', 'err', d.error); }
+    else if(dl.granted){ toast('已领取 '+dl.granted+' 个账号的每日积分', 'ok', '共尝试 '+dl.attempted+' 次'); }
+    else if(dl.already && !dl.granted){ toast('今日已领过', 'ok', '没有重复领取'); }
+    else if(dl.needs_login){ toast('需要人工登录', 'err', '请在浏览器登录 meoo.com 后重试'); }
+    else { toast('本次未领到', 'err', '尝试 '+dl.attempted+' 次，失败 '+dl.failed+' 次'); }
+    return load(false, null);
+  }).catch(function(e){
+    toast('领取失败', 'err', e.message);
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.innerHTML = was; }
+  });
+}
+
+function claimAll(btn){
+  if(!getKey()){ showAuth(); return; }
+  var was = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spin"></span>领取中…'; }
+  return api(BASE + '/daily-login', {method:'POST'}).then(function(d){
+    var dl = (d && d.daily_login) || {};
+    if(d && d.error){ toast('领取失败', 'err', d.error); }
+    else if(dl.granted){ toast('已领取 '+dl.granted+' 个账号的每日积分', 'ok', '共尝试 '+dl.attempted+' 次'); }
+    else if(dl.needs_login){ toast('部分账号需要人工登录', 'err', '请在浏览器登录 meoo.com 后重试'); }
+    else if(dl.already){ toast('今日已领过', 'ok', '没有重复领取'); }
+    else { toast('本次未领到', 'err', '尝试 '+dl.attempted+' 次，失败 '+dl.failed+' 次'); }
+    return load(false, null);
+  }).catch(function(e){
+    toast('领取失败', 'err', e.message);
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.innerHTML = was; }
   });
 }
 

@@ -131,7 +131,7 @@ const providerName = "meoo"
 //	3 字节的汉字被切开后经 encoding/json 变成 U+FFFD 进卡片/日志。现在回退到前一个
 //	码点边界（truncateUTF8Bytes），字节上限不变，结果永远合法 UTF-8；
 //	clampProjectName 同样改为按码点切（64 字节上限不变，不再把半个汉字 POST 给上游）。
-var version = "2026.11.20.2"
+var version = "2026.11.21.1"
 
 var hostAPI *C.cliproxy_host_api
 
@@ -344,6 +344,7 @@ var meooConfigFields = []pluginapi.ConfigField{
 	{Name: "refresh_minutes", Type: pluginapi.ConfigFieldTypeInteger, Description: "Cache lifetime and background refresh period, in minutes. Reads inside the window are served from cache with zero upstream calls. Default 60, clamped to 1..1440."},
 	{Name: "auto_provision", Type: pluginapi.ConfigFieldTypeBoolean, Description: "When an account owns no active project (or its cloud instance is not enabled yet), create/enable it automatically on the next walk. Default true. Set false to inspect-only."},
 	{Name: "project_name", Type: pluginapi.ConfigFieldTypeString, Description: "Name given to a project this plugin creates for an account that has none. Default CPA-Model-Gateway."},
+	{Name: "daily_login", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Automatically claim Meoo's daily 2,000-point login reward, using the web session already stored in this machine's browser profile for that account. Default true. Set false to stop the plugin from reading any browser profile."},
 }
 
 // meooRegistration declares management API + resource routes and nothing else:
@@ -388,6 +389,11 @@ var (
 // fills the cache in the background, which leaves every panel render a pure
 // cache hit. It is idempotent because the host calls register/reconfigure
 // repeatedly, and a second sweep would multiply the upstream traffic.
+//
+// A SECOND loop runs alongside it: the daily-login reward sweep. It has its own
+// clock because its cadence has nothing to do with the cache window — the reward
+// is granted once per day, so the loop only has to look shortly after the local
+// midnight that starts a new day, plus once more after a wake-up.
 func startBackgroundRefresh() {
 	refreshOnce.Do(func() {
 		safeGo("meoo-refresh-loop", func() {
@@ -404,6 +410,25 @@ func startBackgroundRefresh() {
 				// One sweep per period. force=true because the whole point of the
 				// tick is to refresh readings the TTL has already expired.
 				_, _ = refreshAll(true)
+			}
+		})
+		safeGo("meoo-daily-login-loop", func() {
+			for {
+				now := time.Now()
+				delay := dailyLoginNextDelay(now)
+				select {
+				case <-refreshStopCh:
+					return
+				case <-timeAfter(delay):
+				}
+				if !currentEnabled() || !currentDailyLogin() {
+					continue
+				}
+				summary := runDailyLoginSweep(time.Now(), "")
+				if summary.Attempted > 0 {
+					log.Printf("秒悟每日登录积分：尝试 %d，到账 %d，已领 %d，失败 %d，需登录 %d",
+						summary.Attempted, summary.Granted, summary.Already, summary.Failed, summary.NeedsLog)
+				}
 			}
 		})
 	})

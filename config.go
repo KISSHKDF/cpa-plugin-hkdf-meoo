@@ -61,6 +61,7 @@ type parsedSwitches struct {
 	RefreshMinutes *int    `yaml:"refresh_minutes"`
 	AutoProvision  *bool   `yaml:"auto_provision"`
 	ProjectName    *string `yaml:"project_name"`
+	DailyLogin     *bool   `yaml:"daily_login"`
 }
 
 // pluginConfig is the effective configuration after defaults are applied.
@@ -69,6 +70,12 @@ type pluginConfig struct {
 	RefreshMinutes int
 	AutoProvision  bool
 	ProjectName    string
+	// DailyLogin enables the daily 2,000-point login reward (daily_login.go).
+	//
+	// It is ON by default because the operator asked for it, and it is a switch
+	// at all because the feature reads a browser profile on this machine: turning
+	// it off must be possible without uninstalling the plugin.
+	DailyLogin bool
 }
 
 // defaultConfig is the state before any register call.
@@ -78,6 +85,7 @@ func defaultConfig() pluginConfig {
 		RefreshMinutes: refreshMinutesDefault,
 		AutoProvision:  true,
 		ProjectName:    projectNameDefault,
+		DailyLogin:     true,
 	}
 }
 
@@ -127,7 +135,7 @@ func applySwitches(body []byte, next *pluginConfig) {
 		return
 	}
 	// The outer-block shape: the body sits under a literal `config_yaml` scalar.
-	if direct.Enabled == nil && direct.RefreshMinutes == nil && direct.AutoProvision == nil && direct.ProjectName == nil {
+	if direct.Enabled == nil && direct.RefreshMinutes == nil && direct.AutoProvision == nil && direct.ProjectName == nil && direct.DailyLogin == nil {
 		var outer map[string]any
 		if errOuter := yaml.Unmarshal(body, &outer); errOuter == nil {
 			if inner, okInner := outer["config_yaml"].(string); okInner && strings.TrimSpace(inner) != "" {
@@ -149,6 +157,9 @@ func applySwitches(body []byte, next *pluginConfig) {
 	}
 	if direct.ProjectName != nil {
 		next.ProjectName = clampProjectName(*direct.ProjectName)
+	}
+	if direct.DailyLogin != nil {
+		next.DailyLogin = *direct.DailyLogin
 	}
 }
 
@@ -221,6 +232,18 @@ func currentProjectName() string {
 	return clampProjectName(name)
 }
 
+// currentDailyLogin reports whether the daily 2,000-point login reward may run.
+//
+// Read by the daily-login sweep (daily_login.go). The switch exists because the
+// feature reads a browser profile on this machine; the operator must be able to
+// turn it off without uninstalling the plugin.
+func currentDailyLogin() bool {
+	cfgMu.RLock()
+	enabled := currentCfg.DailyLogin
+	cfgMu.RUnlock()
+	return enabled
+}
+
 // configEcho renders the effective config for the panel (no secrets here).
 func configEcho() map[string]any {
 	cfgMu.RLock()
@@ -231,6 +254,7 @@ func configEcho() map[string]any {
 		"refresh_minutes": cfg.RefreshMinutes,
 		"auto_provision":  cfg.AutoProvision,
 		"project_name":    clampProjectName(cfg.ProjectName),
+		"daily_login":     cfg.DailyLogin,
 	}
 }
 

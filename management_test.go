@@ -91,6 +91,8 @@ func TestManagementRoutesAreExactlyTheAgreedSurface(t *testing.T) {
 		"POST /plugins/meoo/accounts/remove",
 		"GET /plugins/meoo/models",
 		"POST /plugins/meoo/cache/reset",
+		"POST /plugins/meoo/daily-login",
+		"GET /plugins/meoo/daily-login",
 		"GET /plugins/meoo/health",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
@@ -643,8 +645,12 @@ func TestHandleMethodDispatch(t *testing.T) {
 }
 
 // TestConfigFieldsAreExactlyTheAgreedSurface AND each one is consumed: the
-// declared keys are the three from §6, and every declared key is echoed from the
+// declared keys are the four from §6, and every declared key is echoed from the
 // same struct the sweep reads.
+//
+// The fourth key, daily_login, was added with the daily 2,000-point login
+// reward (daily_login.go): it is the switch that lets the operator stop the
+// plugin from reading a browser profile on this machine.
 func TestConfigFieldsAreExactlyTheAgreedSurface(t *testing.T) {
 	isolateMeoo(t)
 
@@ -655,7 +661,7 @@ func TestConfigFieldsAreExactlyTheAgreedSurface(t *testing.T) {
 			t.Errorf("config field %q needs a type and a description", field.Name)
 		}
 	}
-	if strings.Join(declared, ",") != "refresh_minutes,auto_provision,project_name" {
+	if strings.Join(declared, ",") != "refresh_minutes,auto_provision,project_name,daily_login" {
 		t.Fatalf("declared config surface = %v", declared)
 	}
 
