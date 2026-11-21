@@ -22,18 +22,15 @@ import (
 // ---------------------------------------------------------------------------
 
 // TestPanelHTMLContract pins the behaviour the operator asked for by name:
-// 刷新数据 forces a fresh walk, 模型 / 诊断 are read-only dialogs, 加账号 posts
-// one user-level key and 清空缓存 drops the readings — and the panel talks to
-// nothing but its own management base. (读缓存 was removed 2026.11.21.4: the
-// operator found the cache-only dialog redundant — the panel itself is already
-// cache-first inside the window.)
+// 刷新数据 forces a fresh walk, 模型 is a read-only dialog, 加账号 posts one
+// user-level key — and the panel talks to nothing but its own management base.
+// (读缓存 was removed 2026.11.21.4 and 诊断 / 清空缓存 in 2026.11.21.5: the
+// operator judged them redundant.)
 func TestPanelHTMLContract(t *testing.T) {
 	required := []string{
 		"刷新数据",             // the explicit action
 		"模型",               // GET /models
 		"加账号",              // POST /accounts/add
-		"诊断",               // GET /health
-		"清空缓存",             // POST /cache/reset
 		"POLL_MS = 300000", // 5-minute panel poll (cache-first, so zero upstream)
 		"/plugins/meoo",    // the only management surface it talks to
 		"document.hidden",  // hidden tabs must not poll
@@ -43,8 +40,6 @@ func TestPanelHTMLContract(t *testing.T) {
 		"/accounts/remove",
 		"/refresh",
 		"/models",
-		"/cache/reset",
-		"/health",
 		// the panel-side cross-check (§7.3) reads CPA's own config path:
 		"/config/api-keys/openai-compatibility",
 		// ... and its three verdicts, plus the entry it looks for:

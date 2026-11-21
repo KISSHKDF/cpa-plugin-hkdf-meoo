@@ -1,3 +1,20 @@
+## 2026.11.21.5
+
+**摘除面板「诊断」「清空缓存」按钮与 GET /health、POST /cache/reset 路由（主人裁定："垃圾而无用"）（2026-11-21）。**
+
+### Removed
+
+1. 面板动作条「诊断」「清空缓存」两个按钮及 `openHealth()` / `askReset()` / `doReset()`
+   三个函数与只剩诊断弹窗在用的 `.dump` 样式。
+2. 后端 `GET /plugins/meoo/health` 路由与 `healthReport()`、`POST /plugins/meoo/cache/reset`
+   路由与 `cacheReset()`。发布前核实 cpa-ops、dsh-ops、cpa-plugin-updater 三棵树均无调用方。
+   `abiGuardHealth()` 保留（abi_guard_test.go 自检仍在用）。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- 路由表面测试收敛为 10 条；动作条动词断言 5 → 3（刷新数据 / 模型 / 加账号）。
+
 ## 2026.11.21.4
 
 **摘除面板「读缓存」按钮与 GET /usage 路由（主人裁定："是个垃圾而多余的按钮"）（2026-11-21）。**

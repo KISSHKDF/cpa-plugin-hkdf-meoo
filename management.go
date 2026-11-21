@@ -1,6 +1,6 @@
 // management.go — the operator surface.
 //
-// Eight verbs, and each maps to one decision:
+// Six verbs, and each maps to one decision:
 //
 //	GET  /accounts           the panel's data. Cache-first: inside the TTL this
 //	                         makes ZERO upstream calls, which is what makes the
@@ -11,8 +11,6 @@
 //	POST /accounts/remove    drop one row by id.
 //	GET  /models             the gateway catalogue, with qwen4-max-preview marked
 //	                         unusable (403 Token-Plan-only, measured).
-//	POST /cache/reset        drop our readings. Never touches the accounts.
-//	GET  /health             version, ABI latch, window, paths. No upstream.
 //	GET  /panel              the browser UI (a resource route, raw HTML).
 //
 // The panel resource is served as RAW HTML with the outer content type as
@@ -102,13 +100,11 @@ func managementRegistration() managementRegistrationResponse {
 			{Method: "POST", Path: base + "/accounts/add", Description: "Store one user-level Meoo key (meoo_ak_…), with an optional label. The key is never echoed back."},
 			{Method: "POST", Path: base + "/accounts/remove", Description: "Remove one stored account by id. Never touches CPA's config or the Meoo account itself."},
 			{Method: "GET", Path: base + "/models", Description: "The model gateway catalogue for the first account that owns a project-level AK, with unusable models marked and explained."},
-			{Method: "POST", Path: base + "/cache/reset", Description: "Drop the cached readings and the cached catalogue so the next read goes upstream. Never touches the accounts."},
 			{Method: "POST", Path: base + "/daily-login", Description: "立即领取每日积分: attempt Meoo's daily 2,000-point login reward for every account (or one named by account_id), using the web session already stored in this machine's browser profile."},
 			{Method: "GET", Path: base + "/daily-login", Description: "The daily-login reward state per account: today's outcome, the amount granted and when the batch became effective. No upstream calls."},
 			{Method: "POST", Path: base + "/daily-login/session", Description: "Store a pasted Meoo web-session cookie for one account (the credential the daily reward needs). It is verified against the account's identity before it is stored, and never echoed back."},
 			{Method: "DELETE", Path: base + "/daily-login/session", Description: "Drop the stored web-session cookie of one account (account_id). The account itself is untouched."},
 			{Method: "POST", Path: base + "/daily-login/login-window", Description: "Open the account's own Edge login window at meoo.com (account_id). The operator logs in once; the session lands in that profile and the next claim attempt picks it up."},
-			{Method: "GET", Path: base + "/health", Description: "Plugin version, host ABI latch, effective refresh window and both file paths. Zero upstream calls."},
 		},
 		Resources: []resourceRoute{
 			{Path: "/panel", Menu: "Meoo 秒悟", Description: "Meoo panel: every account's points, plan and project, the gateway catalogue, hourly auto-refresh and an explicit 刷新数据."},
@@ -163,15 +159,6 @@ func handleManagement(raw []byte) ([]byte, error) {
 		return okEnvelope(removeAccountResponse(req))
 	case method == "GET" && path == "/models":
 		return okEnvelope(jsonResponse(http.StatusOK, modelsView(false)))
-	case method == "POST" && path == "/cache/reset":
-		dropped := cacheReset()
-		return okEnvelope(jsonResponse(http.StatusOK, map[string]any{
-			"success": true,
-			"dropped": dropped,
-			"message": "已清空本插件缓存读数与模型目录；账号文件与 CPA 配置均未改动，下次读取会重新打上游。",
-		}))
-	case method == "GET" && path == "/health":
-		return okEnvelope(jsonResponse(http.StatusOK, healthReport()))
 	case method == "POST" && path == "/daily-login":
 		return okEnvelope(jsonResponse(http.StatusOK, dailyLoginResponse(req)))
 	case method == "GET" && path == "/daily-login":
@@ -490,23 +477,6 @@ func modelsView(force bool) map[string]any {
 		out["note"] = reading.Note
 	}
 	return out
-}
-
-// healthReport is the diagnostics read.
-func healthReport() map[string]any {
-	return map[string]any{
-		"plugin":          providerName,
-		"version":         version,
-		"management_base": loadedManagementBasePath(),
-		"resource_base":   loadedResourceBasePath(),
-		"refresh_minutes": int(currentRefreshTTL().Minutes()),
-		"enabled":         currentEnabled(),
-		"cache_path":      cachePath(),
-		"accounts_file":   accountsPath(),
-		"gateway":         gatewayBase,
-		"open_platform":   openPlatformBase,
-		"abi":             abiGuardHealth(),
-	}
 }
 
 // jsonResponse builds a ManagementResponse carrying JSON.

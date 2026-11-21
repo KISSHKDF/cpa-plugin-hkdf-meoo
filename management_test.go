@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -89,13 +88,11 @@ func TestManagementRoutesAreExactlyTheAgreedSurface(t *testing.T) {
 		"POST /plugins/meoo/accounts/add",
 		"POST /plugins/meoo/accounts/remove",
 		"GET /plugins/meoo/models",
-		"POST /plugins/meoo/cache/reset",
 		"POST /plugins/meoo/daily-login",
 		"GET /plugins/meoo/daily-login",
 		"POST /plugins/meoo/daily-login/session",
 		"DELETE /plugins/meoo/daily-login/session",
 		"POST /plugins/meoo/daily-login/login-window",
-		"GET /plugins/meoo/health",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("route surface drifted:\n got %v\nwant %v", got, want)
@@ -350,41 +347,6 @@ func TestRemoveAccountThroughManagement(t *testing.T) {
 	}
 }
 
-// TestCacheResetDropsReadingsButNotAccounts.
-func TestCacheResetDropsReadingsButNotAccounts(t *testing.T) {
-	isolateMeoo(t)
-	record, errAdd := addAccount(fakeUserKey, "甲")
-	if errAdd != nil {
-		t.Fatalf("seed account: %v", errAdd)
-	}
-	available := 11146.0
-	applyResult(record, accountRead{Outcome: outcomeOK, HasNumbers: true, Available: &available}, time.Now())
-
-	resp := callRoute(t, "POST", "/v0/management/plugins/meoo/cache/reset", nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("cache/reset status = %d", resp.StatusCode)
-	}
-	payload := payloadMap(t, resp)
-	if payload["success"] != true {
-		t.Fatalf("cache/reset payload = %v", payload)
-	}
-	if dropped, okNum := payload["dropped"].(float64); !okNum || dropped < 1 {
-		t.Fatalf("dropped = %v, want >= 1", payload["dropped"])
-	}
-	if !strings.Contains(string(resp.Body), "未改动") {
-		t.Fatalf("the answer must say the accounts were untouched: %s", string(resp.Body))
-	}
-
-	// The account survived: 清空缓存 must never be a way to lose credentials.
-	accounts, errList := listAccounts()
-	if errList != nil || len(accounts) != 1 || accounts[0].UserKey != fakeUserKey {
-		t.Fatalf("clearing the cache touched the account store: %v %v", accounts, errList)
-	}
-	if entry := cacheGet(record.ID); entry != nil {
-		t.Fatalf("the reading survived the reset: %+v", entry)
-	}
-}
-
 // TestModelsRouteMarksTheTokenPlanOnlyModelUnusable drives the real route against
 // a local gateway, with a project-level AK already stored on the account.
 func TestModelsRouteMarksTheTokenPlanOnlyModelUnusable(t *testing.T) {
@@ -465,42 +427,6 @@ func TestModelsRouteWithoutAnyProjectKeyExplainsItself(t *testing.T) {
 	}
 }
 
-// TestHealthReportCarriesTheDiagnostics documents where the cache lives, which
-// window is in force and that the ABI latch exists — in the payload the operator
-// can actually read.
-func TestHealthReportCarriesTheDiagnostics(t *testing.T) {
-	isolateMeoo(t)
-	resp := callRoute(t, "GET", "/v0/management/plugins/meoo/health", nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("health status = %d", resp.StatusCode)
-	}
-	payload := payloadMap(t, resp)
-	for _, key := range []string{
-		"plugin", "version", "management_base", "resource_base", "refresh_minutes",
-		"enabled", "cache_path", "accounts_file", "gateway", "open_platform", "abi",
-	} {
-		if _, present := payload[key]; !present {
-			t.Errorf("health payload is missing %q: %v", key, payload)
-		}
-	}
-	if payload["plugin"] != providerName || payload["version"] != version {
-		t.Fatalf("health identity = %v/%v", payload["plugin"], payload["version"])
-	}
-	if payload["open_platform"] != openPlatformBase || payload["gateway"] != gatewayBase {
-		t.Fatalf("health endpoints = %v/%v", payload["open_platform"], payload["gateway"])
-	}
-	if payload["cache_path"] == payload["accounts_file"] {
-		t.Fatal("the readings cache and the account store must be different files: 清空缓存 must not be able to destroy credentials")
-	}
-	abi, okABI := payload["abi"].(map[string]any)
-	if !okABI {
-		t.Fatalf("health abi = %v", payload["abi"])
-	}
-	if _, present := abi["abi_version"]; !present {
-		t.Fatalf("the ABI latch must be reported: %v", abi)
-	}
-}
-
 // TestManagementBasePathsHaveSafeDefaults: the host may hand us a base path, but
 // the plugin must still answer correctly if it never does.
 func TestManagementBasePathsHaveSafeDefaults(t *testing.T) {
@@ -537,13 +463,13 @@ func TestManagementBasePathsHaveSafeDefaults(t *testing.T) {
 // TestManagementTailHandlesBothDoors pins the prefix stripping directly.
 func TestManagementTailHandlesBothDoors(t *testing.T) {
 	cases := map[string]string{
-		"/v0/management/plugins/meoo/accounts":   "/accounts",
-		"/v0/management/plugins/meoo/accounts/":  "/accounts",
-		"/v8/management/plugins/meoo/health":     "/health",
-		"/v0/resource/plugins/meoo/panel":        "/panel",
-		"/v0/management/plugins/meoo":            "/",
-		"/v0/management/plugins/meoo/":           "/",
-		"/weird/prefix/plugins/meoo/cache/reset": "/cache/reset",
+		"/v0/management/plugins/meoo/accounts":    "/accounts",
+		"/v0/management/plugins/meoo/accounts/":   "/accounts",
+		"/v8/management/plugins/meoo/daily-login": "/daily-login",
+		"/v0/resource/plugins/meoo/panel":         "/panel",
+		"/v0/management/plugins/meoo":             "/",
+		"/v0/management/plugins/meoo/":            "/",
+		"/weird/prefix/plugins/meoo/models":       "/models",
 	}
 	for input, want := range cases {
 		if got := managementTail(input); got != want {
@@ -611,7 +537,7 @@ func TestHandleMethodDispatch(t *testing.T) {
 		t.Fatalf("management.register answer = %s", string(registrationRaw))
 	}
 
-	handleRaw, errHandle := handleMethod("management.handle", []byte(`{"Method":"GET","Path":"/v0/management/plugins/meoo/health"}`))
+	handleRaw, errHandle := handleMethod("management.handle", []byte(`{"Method":"GET","Path":"/v0/management/plugins/meoo/models"}`))
 	if errHandle != nil {
 		t.Fatalf("management.handle: %v", errHandle)
 	}

@@ -307,23 +307,6 @@ func derefFloat(v *float64) float64 {
 	return *v
 }
 
-// cacheReset drops every cached reading, plus the gateway catalogue, which is
-// cached on the same terms. It cannot change an upstream allowance and it never
-// touches accounts.json.
-func cacheReset() int {
-	cacheLoadOnce()
-	cacheMu.Lock()
-	count := len(cacheEntries)
-	cacheEntries = map[string]*accountSnapshot{}
-	cacheSaveLocked(time.Now())
-	cacheMu.Unlock()
-
-	modelsMu.Lock()
-	modelsCache = nil
-	modelsMu.Unlock()
-	return count
-}
-
 // cacheEntriesSnapshot returns a copy of all entries.
 func cacheEntriesSnapshot() map[string]accountSnapshot {
 	cacheLoadOnce()

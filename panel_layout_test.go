@@ -46,9 +46,9 @@ func TestPanelHeaderFollowsHouseLayout(t *testing.T) {
 	if strings.Contains(html, `id="refreshBtn"`) == false {
 		t.Fatal("刷新数据按钮不见了")
 	}
-	// meoo 的五个动词都必须挂在动作条上（少一个就是少一条管理路径；
-	// 读缓存 2026.11.21.4 起移除——缓存态由面板首屏与「诊断」承担）。
-	for _, action := range []string{"刷新数据", "模型", "加账号", "诊断", "清空缓存"} {
+	// meoo 的四个动词都必须挂在动作条上（少一个就是少一条管理路径；
+	// 读缓存 2026.11.21.4、诊断/清空缓存 2026.11.21.5 起移除——主人裁定冗余）。
+	for _, action := range []string{"刷新数据", "模型", "加账号"} {
 		if !strings.Contains(barHTML, action) {
 			t.Errorf("动作条缺少动词 %q", action)
 		}
@@ -158,7 +158,7 @@ func TestPanelClassesUsedByMarkupHaveStyles(t *testing.T) {
 		"cd-credit-line", "cd-credit", "cd-bar", "cd-seg", "cd-msg",
 		// toast + modal + tables
 		"toasts", "toast", "modal-mask", "modal", "modal-hd", "modal-x",
-		"modal-bd", "modal-ft", "hint", "dump", "ut", "num",
+		"modal-bd", "modal-ft", "hint", "ut", "num",
 	}
 	for _, cls := range required {
 		// A rule may be written as `.cd-badge{...}` or `.cd-badge .x{...}`; both
@@ -228,7 +228,6 @@ func TestPanelDialogsAreSelfDrawn(t *testing.T) {
 	for _, needle := range []string{
 		`class="modal-mask"`,
 		`function openModal(`,
-		`function doReset(`,
 		// meoo 特有：另外两个写动作也不能走原生框。
 		`function askRemove(`,
 		`function askAdd(`,

@@ -168,8 +168,6 @@ declared config surface.
 | POST | `/v0/management/plugins/meoo/daily-login/session` | store a pasted web-session cookie for one account; verified against that account's identity, never echoed |
 | DELETE | `/v0/management/plugins/meoo/daily-login/session` | drop the stored web-session cookie of one account |
 | POST | `/v0/management/plugins/meoo/daily-login/login-window` | open the account's own Edge login window at meoo.com (one click before a session expires) |
-| POST | `/v0/management/plugins/meoo/cache/reset` | drop cached readings + catalogue |
-| GET | `/v0/management/plugins/meoo/health` | version, ABI latch, window, paths |
 
 Panel resource: `/v0/resource/plugins/meoo/panel`. Every account-facing verb answers
 one shape: `summary` + `accounts` + `config` + `server_time` + `cache_path`.
