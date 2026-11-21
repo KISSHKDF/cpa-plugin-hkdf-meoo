@@ -70,6 +70,15 @@ type accountSnapshot struct {
 	Granted    float64 `json:"granted"`
 	Consumed   float64 `json:"consumed"`
 	Frozen     float64 `json:"frozen"`
+	Expired    float64 `json:"expired"`
+
+	// Day baseline (workbuddy "今日已用" 同构): the first OK reading of each
+	// local day parks its consumed/available here, so later readings can diff
+	// against it. DayKey is the local YYYY-MM-DD; a different key means the day
+	// rolled over and the baseline is re-stamped by the next OK read.
+	DayKey            string  `json:"day_key,omitempty"`
+	DayStartConsumed  float64 `json:"day_start_consumed,omitempty"`
+	DayStartAvailable float64 `json:"day_start_available,omitempty"`
 
 	PlanCode string `json:"plan_code,omitempty"`
 	PlanName string `json:"plan_name,omitempty"`
@@ -270,7 +279,18 @@ func applyResult(account accountRecord, result accountRead, now time.Time) *acco
 		next.Granted = derefFloat(result.Granted)
 		next.Consumed = derefFloat(result.Consumed)
 		next.Frozen = derefFloat(result.Frozen)
+		next.Expired = derefFloat(result.Expired)
 		next.FetchedAt = now.UnixMilli()
+		// 当日基线（workbuddy「今日已用」同构）：每个本地日的第一次 OK 读数落基线，
+		// 之后每次读都与之相减 ⇒ 「今日已用」是真正的当天消耗，基线 0 点重置。
+		// 日期翻篇（或从来没有基线）即重盖；consumed 变小（上游周期滚动/回调）
+		// 时也重盖，否则差值会是负数、面板会显示负消耗。
+		dayKey := now.Format("2006-01-02")
+		if next.DayKey != dayKey || next.Consumed < next.DayStartConsumed || next.DayStartConsumed == 0 && next.DayStartAvailable == 0 {
+			next.DayKey = dayKey
+			next.DayStartConsumed = next.Consumed
+			next.DayStartAvailable = next.Available
+		}
 	case outcomeDead:
 		// The key is gone: yesterday's number is not "stale", it is wrong.
 		next.HasNumbers = false
@@ -278,6 +298,7 @@ func applyResult(account accountRecord, result accountRead, now time.Time) *acco
 		next.Granted = 0
 		next.Consumed = 0
 		next.Frozen = 0
+		next.Expired = 0
 		next.FetchedAt = 0
 	default:
 		// transient: keep whatever numbers we had, and keep FetchedAt so the card
@@ -510,6 +531,7 @@ type accountView struct {
 	Available      *float64 `json:"available"`
 	Granted        *float64 `json:"granted"`
 	Consumed       *float64 `json:"consumed"`
+	Expired        *float64 `json:"expired"`
 	ProjectURLID   string   `json:"project_url_id"`
 	ProjectName    string   `json:"project_name"`
 	ProjectAKTail  string   `json:"project_ak_tail"`
@@ -521,6 +543,12 @@ type accountView struct {
 	Stale          bool     `json:"stale"`
 	AgeSeconds     int64    `json:"age_seconds"`
 	LastRefreshAt  *string  `json:"last_refresh_at"`
+
+	// 今日口径（workbuddy 同构，2026.11.21.8）：TodayUsed = 该号 consumed − 当日
+	// 基线 consumed；TodayGain = 今日进账（available − 当日基线 available，>0 才下发）。
+	// 基线缺失（今天还没读到过）时 TodayUsed=nil —— 未知不按 0 计，与 workbuddy 同一守卫。
+	TodayUsed *float64 `json:"today_used,omitempty"`
+	TodayGain *float64 `json:"today_gain,omitempty"`
 
 	// DailyLogin is the state of today's 2,000-point login reward for this
 	// account: the outcome (granted / already / failed / needs_login), how many
@@ -534,14 +562,23 @@ type accountView struct {
 
 // meooSummary is the header of the panel.
 type meooSummary struct {
-	Version         string   `json:"version"`
-	Accounts        int      `json:"accounts"`
-	Readable        int      `json:"readable"`
-	Dead            int      `json:"dead"`
-	Stale           int      `json:"stale"`
-	TotalAvailable  *float64 `json:"total_available"`
-	TotalGranted    *float64 `json:"total_granted"`
-	TotalConsumed   *float64 `json:"total_consumed"`
+	Version        string   `json:"version"`
+	Accounts       int      `json:"accounts"`
+	Readable       int      `json:"readable"`
+	Dead           int      `json:"dead"`
+	Stale          int      `json:"stale"`
+	TotalAvailable *float64 `json:"total_available"`
+	TotalGranted   *float64 `json:"total_granted"`
+	TotalConsumed  *float64 `json:"total_consumed"`
+	TotalExpired   *float64 `json:"total_expired"`
+	// 今日口径聚合（workbuddy 汇总卡同构）：TodayRemain = 有基线的号的此刻余额之和，
+	// TodayUsed = 有基线的号的今日已用之和；TodayTotal = TodayRemain + TodayUsed。
+	// 覆盖数与总数分开报，覆盖不全时面板明说（未知不按 0 计）。
+	TodayValid      int      `json:"today_valid"`
+	TodayRemain     *float64 `json:"today_remain"`
+	TodayUsed       *float64 `json:"today_used"`
+	TodayTotal      *float64 `json:"today_total"`
+	TodayGain       *float64 `json:"today_gain"`
 	RefreshedCount  int      `json:"refreshed_count"`
 	RefreshMinutes  int      `json:"refresh_minutes"`
 	ServedFromCache bool     `json:"served_from_cache"`
@@ -576,7 +613,8 @@ func assembleView(refreshed int) map[string]any {
 		ServedFromCache: refreshed == 0,
 		Notes:           []string{},
 	}
-	var totalAvailable, totalGranted, totalConsumed float64
+	var totalAvailable, totalGranted, totalConsumed, totalExpired float64
+	var todayUsedAgg, todayRemainAgg, todayGainAgg float64
 	var lastAttempt time.Time
 	missingProjectAK := 0
 	for _, account := range accounts {
@@ -630,6 +668,24 @@ func assembleView(refreshed int) map[string]any {
 				totalAvailable += available
 				totalGranted += granted
 				totalConsumed += consumed
+				totalExpired += snapshot.Expired
+				if snapshot.Expired > 0 {
+					expired := snapshot.Expired
+					view.Expired = &expired
+				}
+				// 今日口径（基线在 applyResult 落）：consumed ≥ 基线才算有效差值；
+				// 基线缺失/上游回调都算"未知"，未知不按 0 计。
+				if snapshot.DayKey == now.Format("2006-01-02") && snapshot.Consumed >= snapshot.DayStartConsumed {
+					used := snapshot.Consumed - snapshot.DayStartConsumed
+					view.TodayUsed = &used
+					summary.TodayValid++
+					todayUsedAgg += used
+					todayRemainAgg += available
+					if gain := available - snapshot.DayStartAvailable; gain > 0 {
+						view.TodayGain = &gain
+						todayGainAgg += gain
+					}
+				}
 			}
 			if snapshot.Outcome == outcomeDead {
 				summary.Dead++
@@ -658,6 +714,22 @@ func assembleView(refreshed int) map[string]any {
 		summary.TotalAvailable = &totalAvailable
 		summary.TotalGranted = &totalGranted
 		summary.TotalConsumed = &totalConsumed
+		if totalExpired > 0 {
+			summary.TotalExpired = &totalExpired
+		}
+	}
+	if summary.TodayValid > 0 {
+		// 今日口径聚合只在"至少一个号有可比基线"时下发；覆盖不全由 TodayValid 与
+		// Accounts 的差值说明（面板渲染覆盖注记），未知不按 0 计。
+		todayRemain := todayRemainAgg
+		todayUsed := todayUsedAgg
+		todayTotal := todayRemainAgg + todayUsedAgg
+		summary.TodayRemain = &todayRemain
+		summary.TodayUsed = &todayUsed
+		summary.TodayTotal = &todayTotal
+		if todayGainAgg > 0 {
+			summary.TodayGain = &todayGainAgg
+		}
 	}
 	summary.LastAttemptAt = nowPtr(lastAttempt)
 	if errAccounts != nil {

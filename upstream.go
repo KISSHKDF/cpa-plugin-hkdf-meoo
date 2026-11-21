@@ -909,6 +909,7 @@ type accountRead struct {
 	Granted   *float64
 	Consumed  *float64
 	Frozen    *float64
+	Expired   *float64
 
 	ProjectURLID string
 	ProjectName  string
@@ -954,6 +955,7 @@ func readAccount(record accountRecord) accountRead {
 		read.Granted = points.Granted
 		read.Consumed = points.Consumed
 		read.Frozen = points.Frozen
+		read.Expired = points.Expired
 	}
 
 	entitlement, errEntitlement := fetchEntitlement(record.UserKey)

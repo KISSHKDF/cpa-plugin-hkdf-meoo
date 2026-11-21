@@ -275,16 +275,17 @@ func TestCreditBarsDrainFromTheRight(t *testing.T) {
 		t.Fatal("进度条没有按 >0 过滤零宽段：min-width 会画出假的已耗/剩余边角")
 	}
 
-	// 汇总条与卡片条同一口径：宽度 = 可用占比，颜色也按可用占比取。
-	// 2026.11.21.7 对齐 workbuddy：标题改为「总可用 / 总量」（原文案「总总量」是笔误形态）。
-	if !strings.Contains(html, "总可用 / 总量") {
-		t.Fatal("汇总条的标题不是「总可用 / 总量」：卡片条已是可用口径，汇总条必须同口径")
+	// 汇总条与卡片条同一口径（2026.11.21.8 全面转今日口径，与 workbuddy 同构）：
+	// 标题=「今日已用 / 今日总量」，条宽=剩余占比（手里还剩），颜色按剩余取。
+	// 累计口径退到悬停对照，不得再画成进度条。
+	if !strings.Contains(html, "今日已用 / 今日总量") {
+		t.Fatal("汇总条的标题不是「今日已用 / 今日总量」：汇总条必须与卡片条同为今日口径（workbuddy 同构）")
 	}
-	if strings.Contains(html, "总已耗 / 总总量") {
-		t.Fatal("汇总条仍在用「总已耗 / 总总量」的已耗进度口径")
+	if strings.Contains(html, "总可用 / 总总量") || strings.Contains(html, "总可用 / 总量") {
+		t.Fatal("汇总条仍在画累计口径（总可用/总量）：累计数字只能出现在悬停对照里")
 	}
-	if !strings.Contains(html, "barColor(pct)") || strings.Contains(html, "barColor(100-pct)") {
-		t.Fatal("汇总条的颜色仍按「已耗」取（barColor(100-pct)），与卡片条方向相反")
+	if !strings.Contains(html, "fmtPct(100-pct)") {
+		t.Fatal("汇总条不再画「手里还剩」（剩余占比锚定左端）")
 	}
 
 	// loomy 的段宽有 3px 下限；meoo 原来写 0，小额剩余会渲染成空条。

@@ -111,6 +111,8 @@ button.sec{background:var(--btn-sec);color:var(--fg)}button.sec:hover{background
 .cd-credit{display:inline-flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
 .cd-credit b{font-weight:700}
 .cd-credit.dim{color:var(--mut)}
+/* 今日获取（workbuddy 2026.11.15.1 同款）：今天的进账，绿色强调。 */
+.cd-gain{color:var(--ok);font-weight:600}
 .cd-bar{display:flex;gap:2px;width:100%;height:10px;background:var(--surface-muted);border-radius:5px;overflow:hidden}
 .cd-seg{display:block;height:10px;min-width:3px;background:var(--ok);opacity:var(--a,1)}
 .cd-seg.used{background:var(--mut-soft)}
@@ -496,26 +498,45 @@ function isCpaEntryGroup(group){
 function loadCpaKeys(){
   if(CPA.checked) return Promise.resolve(CPA);
   /* api() already prepends DOOR + "/management"; this path is the host's own config
-     tree, NOT this plugin's base (BASE = /plugins/meoo), so it must not carry BASE. */
-  return api('/config/api-keys/openai-compatibility').then(function(payload){
-    var groups = cpaGroupsOf(payload);
-    if(!groups){ CPA.state = 'unknown'; CPA.checked = true; return CPA; }
-    var keys = [], found = false;
-    for(var i=0;i<groups.length;i++){
-      if(!isCpaEntryGroup(groups[i])) continue;
-      found = true;
-      keys = keys.concat(cpaKeysOf(groups[i]));
-    }
-    CPA.state = found ? 'ok' : 'unknown';
-    CPA.keys = keys;
-    CPA.checked = true;
-    return CPA;
-  }).catch(function(){
-    /* 宿主路径变了、权限不足、版本漂移：只降级成「未知」，不动主流程。 */
-    CPA.state = 'unknown';
-    CPA.checked = true;
-    return CPA;
-  });
+     tree, NOT this plugin's base (BASE = /plugins/meoo), so it must not carry BASE.
+     2026.11.21.8: the host mounts the openai-compatibility config tree on the /v8
+     door (GET /v8/management/config/api-keys/openai-compatibility); the /v0 door
+     answers 404 — measured. The old single-door call therefore 404'd forever and
+     the catch branch marked every account 未知/待核对. Try /v8 first (the host
+     keeps /v0 and /v8 alive at once), then fall back to the current door. */
+  function tryDoor(door){
+    return fetch(door + '/management/config/api-keys/openai-compatibility', {
+      credentials: 'omit',
+      headers: authHeaders(getKey())
+    }).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  var k = getKey();
+  if(!k){ CPA.state = 'unknown'; CPA.checked = true; return Promise.resolve(CPA); }
+  return tryDoor('/v8')
+    .catch(function(){ return tryDoor('/v0'); })
+    .catch(function(){ return tryDoor(DOOR); })
+    .then(function(payload){
+      var groups = cpaGroupsOf(payload);
+      if(!groups){ CPA.state = 'unknown'; CPA.checked = true; return CPA; }
+      var keys = [], found = false;
+      for(var i=0;i<groups.length;i++){
+        if(!isCpaEntryGroup(groups[i])) continue;
+        found = true;
+        keys = keys.concat(cpaKeysOf(groups[i]));
+      }
+      CPA.state = found ? 'ok' : 'unknown';
+      CPA.keys = keys;
+      CPA.checked = true;
+      return CPA;
+    }).catch(function(){
+      /* 宿主路径变了、权限不足、版本漂移：只降级成「未知」，不动主流程。 */
+      CPA.state = 'unknown';
+      CPA.checked = true;
+      return CPA;
+    });
 }
 function cpaVerdict(a){
   if(CPA.state !== 'ok') return 'unknown';
@@ -567,34 +588,45 @@ function renderSummary(){
   if(!rows.length){ box.style.display='none'; box.innerHTML=''; return; }
   var sc = scoped();
   var g = aggOf(rows);
-  var used = (s.total_consumed==null) ? null : num0(s.total_consumed);
-  var total = (s.total_granted==null) ? null : num0(s.total_granted);
-  var avail = (s.total_available==null) ? ((used!=null && total!=null) ? total-used : null) : num0(s.total_available);
-  /* 条子画的是「手里还剩多少」，与 loomy/workbuddy 同一口径：绿色从左边起，随消耗从右端缩短。 */
-  var pct = (avail!=null && total!=null && total>0) ? Math.max(0, Math.min(100, avail/total*100)) : null;
-  var notes = (s.notes||[]).map(function(n){ return '<div class="pb-meta pb-warn">'+esc(n)+'</div>'; }).join('');
   /* 数字一律 .num 等宽（workbuddy §6）：轮询刷新时宽度不跳。 */
-  var meta = sc.length + ' / ' + g.n + ' 个账号 · 可读 <span class="num">'+g.readable+'</span> · 失效 <span class="num">'+g.dead+'</span>'
+  var meta = sc.length + ' / ' + g.n + ' 个账号 · 有数据 <span class="num">'+g.readable+'</span> · 失效 <span class="num">'+g.dead+'</span>'
     + ' · 读数过期 <span class="num">'+g.stale+'</span> · 已在 CPA <span class="num">'+g.inCpa+'</span> · 未挂进 <span class="num">'+g.outCpa+'</span> · 待核对 <span class="num">'+g.unknownCpa+'</span>';
-  /* 缓存细节行收进主进度条的悬停说明（workbuddy 汇总卡形态：一行 title 讲口径）。
-     桌面端悬停可读，触屏退化为不显示——这些是排障信息，不是主信息。 */
-  var detailTitle = '缓存时间 '+(s.last_attempt_at||'—')
-    + '\n服务器时间 '+(lastPayload.server_time||'—')
-    + '\n刷新窗口 '+(s.refresh_minutes==null?'—':s.refresh_minutes)+' 分钟（窗口内读取零上游调用）'
-    + '\n本次'+(s.served_from_cache?'读的是缓存':'已走上游')
-    + (lastPayload.cache_path ? '\n缓存文件 '+lastPayload.cache_path : '')
-    + '\n\n口径：可用占比 = 总可用 ÷ 总量；绿色从左起、随消耗从右端缩短。'
-    + '\n总可用 '+fmtNum(s.total_available)+' · 总已耗 '+fmtNum(s.total_consumed)+' · 总量 '+fmtNum(s.total_granted);
+  /* 今日口径大条（workbuddy 2026-10-22.4 主人原话同构）：今日已用 ÷ 今日总量，
+     今日总量 = 今日结算剩余 + 今日已用，基线每天 0 点重置。累计口径退到悬停当对照。
+     覆盖不全（TodayValid < 有数据号数）时明说，未知不按 0 计。 */
+  var tu = s.today_used, tr = s.today_remain, tt = s.today_total, tg = s.today_gain;
+  var covered = s.today_valid||0;
+  var cover = (covered < g.readable) ? '（今日已用只覆盖 <span class="num">'+covered+'/'+g.readable+'</span> 个号；其余今天还没有可比基线）' : '';
+  var pct = (tt!=null && tt>0 && tu!=null) ? Math.max(0, Math.min(100, tu/tt*100)) : null;
+  /* 条画「手里还剩」：剩余段锚定左端、宽度=剩余占比，从右端向左缩（loomy/workbuddy 同方向）。 */
+  var barColorToday = 'var(--ok)'; if(pct!=null){ if(pct>80) barColorToday='var(--err)'; else if(pct>50) barColorToday='var(--warn)'; }
+  var notes = (s.notes||[]).map(function(n){ return '<div class="pb-meta pb-warn">'+esc(n)+'</div>'; }).join('');
+  var cumTitle = '累计口径对照（不画成进度条）：总可用 '+fmtNum(s.total_available)+' · 总已耗 '+fmtNum(s.total_consumed)+' · 总量 '+fmtNum(s.total_granted)
+    + (s.total_expired!=null ? (' · 已过期 '+fmtNum(s.total_expired)) : '')
+    + '\n\n今日口径：今日总量 = 今日结算剩余 + 今日已用；基线 = 每个号今天第一次读到的 consumed/available，0 点重置。'
+    + '\n今日已用 = 每号（最近一次 consumed − 今天第一次读到的 consumed）相加。'
+    + (s.today_gain!=null ? ('\n今日获取 +'+fmtNum(s.today_gain)+' = 今天有进账的号（此刻余额比日初基线多出的量）相加。') : '')
+    + '\n缓存时间 '+(s.last_attempt_at||'—')+' · 服务器时间 '+textOr(lastPayload.server_time)
+    + ' · 刷新窗口 '+(s.refresh_minutes==null?'—':s.refresh_minutes)+' 分钟 · 本次'+(s.served_from_cache?'读的是缓存':'已走上游')
+    + (lastPayload.cache_path ? ('\n缓存文件 '+lastPayload.cache_path) : '');
+  var todayLine;
+  if(tu==null || tt==null){
+    todayLine = '<div class="pb-meta">今日结算剩余 <span class="num">'+fmtNum(tr)+'</span> · 今日已用 未知（今天还没有任何号建立可比基线；打开面板或点「刷新数据」后就有） <span style="color:var(--mut)">· 未知不按 0 计</span></div>';
+  } else {
+    todayLine = '<div class="pb-meta">今日结算剩余 <span class="num">'+fmtNum(tr)+'</span> · 今日已用 <span class="num">'+fmtNum(tu)+'</span> · 今日总量 <span class="num">'+fmtNum(tt)+'</span>'
+      + (tg!=null ? (' · <span style="color:var(--ok);font-weight:600">今日获取 <span class="num">+'+fmtNum(tg)+'</span></span>') : '')
+      + cover + ' <span style="color:var(--mut)">（悬停看算法与累计对照）</span></div>';
+  }
   box.style.display = 'block';
   box.innerHTML =
       '<div class="summary-hd">'
-    +   '<div class="summary-title">积分汇总 · '+esc(FILTER_LABEL[currentFilter]||'全部账号')+'</div>'
+    +   '<div class="summary-title">用量汇总 · '+esc(FILTER_LABEL[currentFilter]||'全部账号')+'</div>'
     +   '<div class="summary-meta">'+meta+'</div>'
     + '</div>'
-    + '<div class="pb" title="'+esc(detailTitle)+'">'
-    +   '<div class="pb-label"><span>总可用 / 总量</span><span>'+(pct==null?'—':('可用 <span class="num">'+fmtPct(pct)+'</span>'))+'</span></div>'
-    +   '<div class="pb-track"><div class="pb-bar" style="width:'+(pct==null?0:pct).toFixed(1)+'%;background:'+(pct==null?'var(--surface-muted)':barColor(pct))+'"></div></div>'
-    +   '<div class="pb-meta">总可用 <span class="num">'+fmtNum(s.total_available)+'</span> · 总已耗 <span class="num">'+fmtNum(s.total_consumed)+'</span> · 总量 <span class="num">'+fmtNum(s.total_granted)+'</span> · 缓存 '+esc(fmtStamp(s.last_attempt_at))+' <span style="color:var(--mut)">（悬停看口径与缓存细节）</span></div>'
+    + '<div class="pb" title="'+esc(cumTitle)+'">'
+    +   '<div class="pb-label"><span>今日已用 / 今日总量</span><span>'+(pct==null?'今日已用 未知':('手里还剩 <span class="num">'+fmtPct(100-pct)+'</span>'))+'</span></div>'
+    +   '<div class="pb-track"><div class="pb-bar" style="width:'+(pct==null?0:(100-pct)).toFixed(1)+'%;background:'+(pct==null?'var(--surface-muted)':barColorToday)+'"></div></div>'
+    +   todayLine
     + '</div>'
     + notes;
 }
@@ -684,11 +716,15 @@ function card(a){
     + '</div>'
     + '<div class="cd-meta">'
     +   '<div class="cd-mi"><span class="cd-lbl">读数</span><span class="cd-val'+(stale?' warn':'')+'">'+esc(fmtAge(a.age_seconds))+'</span></div>'
-    +   '<div class="cd-mi right"><span class="cd-lbl">已耗 / 总量</span><span class="cd-val">'+fmtNum(a.consumed)+' / '+fmtNum(a.granted)+'</span></div>'
+    +   '<div class="cd-mi right"><span class="cd-lbl">累计已耗 / 总量</span><span class="cd-val">'+fmtNum(a.consumed)+' / '+fmtNum(a.granted)+'</span></div>'
     + '</div>'
     + '<div class="cd-credit-line">'
-    +   '<span class="cd-credit"><span class="cd-lbl">可用积分</span><b class="num">'+fmtNum(a.available)+'</b></span>'
-    +   '<span class="cd-credit dim">'+(pct==null?'':'手里还剩 '+esc(fmtPct(100-pct)))+'</span>'
+    +   '<span class="cd-credit"><span class="cd-lbl">剩余</span><b class="num">'+fmtNum(a.available)+'</b></span>'
+    +   '<span class="cd-credit dim" title="今日已用 = 该号最近一次 consumed − 今天第一次读到的 consumed（日初基线，0 点重置）。未知 = 今天还没有可比基线，不按 0 计。">'
+    +     '今日已用 '+(a.today_used==null ? '未知' : '<span class="num">'+fmtNum(a.today_used)+'</span>')
+    +     ((a.today_gain!=null) ? ' · <span class="cd-gain">今日获取 <span class="num">+'+fmtNum(a.today_gain)+'</span></span>' : '')
+    +     ((a.expired!=null && num0(a.expired)>0) ? ' · <span title="上游已发放但已过期的积分（不在可用、已耗里），从总量里扣除后才是真正能用的">已过期 '+fmtNum(a.expired)+'</span>' : '')
+    +   '</span>'
     + '</div>'
     + bar
     + '<div class="cd-meta" style="margin-top:8px">'

@@ -131,7 +131,7 @@ const providerName = "meoo"
 //	3 字节的汉字被切开后经 encoding/json 变成 U+FFFD 进卡片/日志。现在回退到前一个
 //	码点边界（truncateUTF8Bytes），字节上限不变，结果永远合法 UTF-8；
 //	clampProjectName 同样改为按码点切（64 字节上限不变，不再把半个汉字 POST 给上游）。
-var version = "2026.11.21.7"
+var version = "2026.11.21.8"
 
 var hostAPI *C.cliproxy_host_api
 
