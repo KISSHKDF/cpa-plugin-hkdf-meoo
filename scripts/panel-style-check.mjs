@@ -119,7 +119,7 @@ for (const m of cssClean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (!inner.startsWith('<button id="refreshBtn"')) {
       failMsg('.bar 的第一个子元素必须是 <button id="refreshBtn"…>（主操作左起第一位），实际：' + inner.slice(0, 90));
     }
-    for (const verb of ['刷新数据', '读缓存', '模型', '加账号', '诊断', '清空缓存']) {
+    for (const verb of ['刷新数据', '模型', '加账号', '诊断', '清空缓存']) {
       if (!inner.includes(verb)) failMsg('动作条缺少动词：' + verb);
     }
   }

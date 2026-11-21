@@ -325,7 +325,7 @@ func TestAccountViewNeverEchoesFullKey(t *testing.T) {
 		ProjectAK:    fakeProjectAK,
 	}, time.Now())
 
-	raw, errMarshal := json.Marshal(assembleView(0, true))
+	raw, errMarshal := json.Marshal(assembleView(0))
 	if errMarshal != nil {
 		t.Fatalf("marshal payload: %v", errMarshal)
 	}

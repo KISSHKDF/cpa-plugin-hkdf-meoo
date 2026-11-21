@@ -160,7 +160,6 @@ declared config surface.
 |---|---|---|
 | GET | `/v0/management/plugins/meoo/accounts` | panel data, cache-first (zero upstream inside the window) |
 | POST | `/v0/management/plugins/meoo/refresh` | 刷新数据: full walk now |
-| GET | `/v0/management/plugins/meoo/usage` | the same payload, cache-only |
 | POST | `/v0/management/plugins/meoo/accounts/add` | store one user-level key + optional label |
 | POST | `/v0/management/plugins/meoo/accounts/remove` | drop one row by id |
 | GET | `/v0/management/plugins/meoo/models` | gateway catalogue, unusable models marked |

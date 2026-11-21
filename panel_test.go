@@ -22,14 +22,14 @@ import (
 // ---------------------------------------------------------------------------
 
 // TestPanelHTMLContract pins the behaviour the operator asked for by name:
-// 刷新数据 forces a fresh walk, 读缓存 answers from the cache with zero upstream
-// calls, 模型 / 诊断 are read-only dialogs, 加账号 posts one user-level key and
-// 清空缓存 drops the readings — and the panel talks to nothing but its own
-// management base.
+// 刷新数据 forces a fresh walk, 模型 / 诊断 are read-only dialogs, 加账号 posts
+// one user-level key and 清空缓存 drops the readings — and the panel talks to
+// nothing but its own management base. (读缓存 was removed 2026.11.21.4: the
+// operator found the cache-only dialog redundant — the panel itself is already
+// cache-first inside the window.)
 func TestPanelHTMLContract(t *testing.T) {
 	required := []string{
 		"刷新数据",             // the explicit action
-		"读缓存",              // GET /usage: zero upstream
 		"模型",               // GET /models
 		"加账号",              // POST /accounts/add
 		"诊断",               // GET /health
@@ -42,7 +42,6 @@ func TestPanelHTMLContract(t *testing.T) {
 		"/accounts/add",
 		"/accounts/remove",
 		"/refresh",
-		"/usage",
 		"/models",
 		"/cache/reset",
 		"/health",

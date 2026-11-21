@@ -573,17 +573,12 @@ type meooSummary struct {
 // what makes the panel poll free.
 func buildView(force bool) map[string]any {
 	refreshed, _ := refreshAll(force)
-	return assembleView(refreshed, false)
-}
-
-// usageView is the zero-upstream view: it never walks, only reads the cache.
-func usageView() map[string]any {
-	return assembleView(0, true)
+	return assembleView(refreshed)
 }
 
 // assembleView builds the payload from the cache plus whatever the sweep just
 // stored. It performs NO upstream reads of its own.
-func assembleView(refreshed int, cacheOnly bool) map[string]any {
+func assembleView(refreshed int) map[string]any {
 	now := time.Now()
 	ttl := currentRefreshTTL()
 	accounts, errAccounts := listAccounts()
@@ -700,10 +695,6 @@ func assembleView(refreshed int, cacheOnly bool) map[string]any {
 		"config":      configEcho(),
 		"server_time": nowTimestamp(now),
 		"cache_path":  cachePath(),
-	}
-	if cacheOnly {
-		payload["mode"] = "cache"
-		payload["note"] = "本视图只读缓存，不做任何上游调用；每行 age_seconds 是读数的年龄。"
 	}
 	return payload
 }

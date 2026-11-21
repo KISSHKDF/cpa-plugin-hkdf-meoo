@@ -1184,7 +1184,7 @@ func TestMeasuredAccountReachesThePanelWithAProjectKey(t *testing.T) {
 		t.Fatalf("refreshAll = %d, %v", refreshed, errRefresh)
 	}
 
-	payload := assembleView(refreshed, true)
+	payload := assembleView(refreshed)
 	rows, okRows := payload["accounts"].([]accountView)
 	if !okRows || len(rows) != 1 {
 		t.Fatalf("panel rows = %#v", payload["accounts"])

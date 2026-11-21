@@ -205,7 +205,6 @@ table.ut td.num{text-align:right;font-variant-numeric:tabular-nums}
   <div class="bar">
     <button id="refreshBtn" onclick="load(true,this)" title="立即重走每个账号的发现链（身份 → 项目 → 云服务 → 项目级 AK → 积分 → 权益），并重绘面板。积分查询不扣分。">刷新数据</button>
     <button class="sec" onclick="claimAll(this)" title="为每个账号尝试领取今日的「每日登录赠送积分」（2,000 分）。插件会复用本机浏览器里已有的登录态，不存密码、不填短信。已经领过的账号不会重复领取。">领每日积分</button>
-    <button class="sec" onclick="openUsage(this)" title="同一份载荷，只读缓存：零上游调用，每行带读数年龄。">读缓存</button>
     <button class="sec" onclick="openModels(this)" title="模型网关目录（项目级 AK），不可用的模型会被标出来。">模型</button>
     <button class="sec" onclick="askAdd(this)" title="粘贴一个用户级 meoo_ak_… key（可选备注）；key 只落本插件自己的账号文件。">加账号</button>
     <button class="sec" onclick="openHealth(this)" title="插件版本、宿主 ABI、刷新窗口、账号文件与缓存路径。纯本地读取，零上游。">诊断</button>
@@ -799,34 +798,7 @@ function saveSessionCookie(btn, id){
   });
 }
 
-/* ---------- 读缓存 / 模型 / 诊断 ---------- */
-function openUsage(btn){
-  openModal('读缓存（零上游）', '<div class="hint">读取中…</div>');
-  api(BASE + '/usage').then(function(d){
-    var head = '<div class="hint">本视图只读缓存，不做任何上游调用；每行的「读数」是这份数字的年龄。</div>';
-    if(d && d.error){
-      openModal('读缓存（零上游）', head + '<div class="hint pb-warn">读取失败：'+esc(d.error)+'</div>');
-      return;
-    }
-    var rows = (d && d.accounts) || [];
-    if(!rows.length){
-      openModal('读缓存（零上游）', head + '<div class="hint">缓存里还没有账号。先点「加账号」粘一个用户级 key，再点「刷新数据」。</div>');
-      return;
-    }
-    var html = head + '<table class="ut"><thead><tr><th>账号</th><th>可用积分</th><th>已耗</th><th>总量</th><th>读数</th></tr></thead><tbody>';
-    rows.forEach(function(r){
-      html += '<tr><td>'+esc(rowName(r))+'</td>'
-        + '<td class="num">'+fmtNum(r.available)+'</td>'
-        + '<td class="num">'+fmtNum(r.consumed)+'</td>'
-        + '<td class="num">'+fmtNum(r.granted)+'</td>'
-        + '<td>'+esc(fmtAge(r.age_seconds))+'</td></tr>';
-    });
-    openModal('读缓存（零上游）', html + '</tbody></table>');
-  }).catch(function(e){
-    openModal('读缓存（零上游）', '<div class="hint">读不到：'+esc(e.message)+'</div>');
-  });
-}
-
+/* ---------- 模型 / 诊断 ---------- */
 function modelTag(m){
   if(m && m.usable) return '<span class="cd-pill ok">可用</span>';
   var note = String((m && m.note)||'');

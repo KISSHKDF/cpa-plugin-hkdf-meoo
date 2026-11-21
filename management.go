@@ -1,12 +1,11 @@
 // management.go — the operator surface.
 //
-// Nine verbs, and each maps to one decision:
+// Eight verbs, and each maps to one decision:
 //
 //	GET  /accounts           the panel's data. Cache-first: inside the TTL this
 //	                         makes ZERO upstream calls, which is what makes the
 //	                         panel's 300-second poll free.
 //	POST /refresh            刷新数据: ignore the TTL, re-walk every account now.
-//	GET  /usage              the same payload with no upstream calls at all.
 //	POST /accounts/add       store one user-level key. Writes only the plugin's own
 //	                         account file; never CPA's config.
 //	POST /accounts/remove    drop one row by id.
@@ -100,7 +99,6 @@ func managementRegistration() managementRegistrationResponse {
 		Routes: []managementRoute{
 			{Method: "GET", Path: base + "/accounts", Description: "Meoo accounts with points, plan and project membership. Cache-first: inside the refresh window this makes zero upstream calls."},
 			{Method: "POST", Path: base + "/refresh", Description: "刷新数据: re-walk every account now, ignoring the cache window, and return the full panel payload."},
-			{Method: "GET", Path: base + "/usage", Description: "The same payload served straight from the cache: zero upstream calls, every row carrying its age."},
 			{Method: "POST", Path: base + "/accounts/add", Description: "Store one user-level Meoo key (meoo_ak_…), with an optional label. The key is never echoed back."},
 			{Method: "POST", Path: base + "/accounts/remove", Description: "Remove one stored account by id. Never touches CPA's config or the Meoo account itself."},
 			{Method: "GET", Path: base + "/models", Description: "The model gateway catalogue for the first account that owns a project-level AK, with unusable models marked and explained."},
@@ -159,8 +157,6 @@ func handleManagement(raw []byte) ([]byte, error) {
 		return okEnvelope(jsonResponse(http.StatusOK, buildView(false)))
 	case method == "POST" && path == "/refresh":
 		return okEnvelope(jsonResponse(http.StatusOK, buildView(true)))
-	case method == "GET" && path == "/usage":
-		return okEnvelope(jsonResponse(http.StatusOK, usageView()))
 	case method == "POST" && path == "/accounts/add":
 		return okEnvelope(addAccountResponse(req))
 	case method == "POST" && path == "/accounts/remove":

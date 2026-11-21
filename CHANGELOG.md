@@ -1,3 +1,20 @@
+## 2026.11.21.4
+
+**摘除面板「读缓存」按钮与 GET /usage 路由（主人裁定："是个垃圾而多余的按钮"）（2026-11-21）。**
+
+### Removed
+
+1. 面板动作条「读缓存」按钮与 `openUsage()` 弹窗。它与主面板看的是同一份载荷，而面板首屏
+   （`GET /accounts`）在 60 分钟窗口内本来就是零上游——这个按钮没有独立价值。
+2. 后端 `GET /plugins/meoo/usage` 路由、`usageView()` 与 `assembleView` 的 `cacheOnly`
+   死参数（连同 payload 的 `mode`/`note` 字段）。发布前核实过 cpa-ops、dsh-ops、
+   cpa-plugin-updater 三棵树均无 `/usage` 调用方，纯死路由一并摘除。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- 路由表面测试同步收敛为 12 条；动作条动词断言 6 → 5。
+
 ## 2026.11.21.3
 
 **会话到期提醒 + 一键登录窗（A+C 方案的 C；A 的前提实测不成立，如实记录）（2026-11-21）。**

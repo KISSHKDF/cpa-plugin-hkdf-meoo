@@ -46,8 +46,9 @@ func TestPanelHeaderFollowsHouseLayout(t *testing.T) {
 	if strings.Contains(html, `id="refreshBtn"`) == false {
 		t.Fatal("刷新数据按钮不见了")
 	}
-	// meoo 的六个动词都必须挂在动作条上（少一个就是少一条管理路径）。
-	for _, action := range []string{"刷新数据", "读缓存", "模型", "加账号", "诊断", "清空缓存"} {
+	// meoo 的五个动词都必须挂在动作条上（少一个就是少一条管理路径；
+	// 读缓存 2026.11.21.4 起移除——缓存态由面板首屏与「诊断」承担）。
+	for _, action := range []string{"刷新数据", "模型", "加账号", "诊断", "清空缓存"} {
 		if !strings.Contains(barHTML, action) {
 			t.Errorf("动作条缺少动词 %q", action)
 		}

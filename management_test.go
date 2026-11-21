@@ -86,7 +86,6 @@ func TestManagementRoutesAreExactlyTheAgreedSurface(t *testing.T) {
 	want := []string{
 		"GET /plugins/meoo/accounts",
 		"POST /plugins/meoo/refresh",
-		"GET /plugins/meoo/usage",
 		"POST /plugins/meoo/accounts/add",
 		"POST /plugins/meoo/accounts/remove",
 		"GET /plugins/meoo/models",
@@ -224,15 +223,6 @@ func TestUnifiedPayloadShapeFromRefresh(t *testing.T) {
 	}
 	if strings.Contains(body, `"total_available":0`) {
 		t.Fatalf("absent totals must serialise as null, never as 0: %s", body)
-	}
-
-	// /usage is the same shape with zero upstream calls.
-	usage := callRoute(t, "GET", "/v0/management/plugins/meoo/usage", nil)
-	usageBody := string(usage.Body)
-	for _, needle := range []string{`"summary"`, `"mode":"cache"`, `"server_time"`, `"cache_path"`} {
-		if !strings.Contains(usageBody, needle) {
-			t.Errorf("the usage payload is missing %s: %s", needle, usageBody)
-		}
 	}
 
 	// /accounts answers the same shape as /refresh (cache-first).
