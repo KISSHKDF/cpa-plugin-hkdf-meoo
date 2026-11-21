@@ -114,7 +114,52 @@ button.sec{background:var(--btn-sec);color:var(--fg)}button.sec:hover{background
 .cd-bar{display:flex;gap:2px;width:100%;height:10px;background:var(--surface-muted);border-radius:5px;overflow:hidden}
 .cd-seg{display:block;height:10px;min-width:3px;background:var(--ok);opacity:var(--a,1)}
 .cd-seg.used{background:var(--mut-soft)}
-.cd-msg{margin-top:7px;font-size:11px;color:var(--mut);line-height:1.5}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.pb-meta .num{font-weight:600;color:var(--fg)}
+/* ===== 2026.11.21.7 全面照抄 house reference（workbuddy/panel.html）=====
+   卡片结构对齐：①状态胶囊独占一行（.cd-status），业务钮留 .cd-ops；
+   ②账号级工具钮（领分/登录/粘会话/移除）改 32px 图标钮收进 .cd-utils，
+   与业务钮分行——语义分层（日常手势 vs 账号级工具，移除是破坏性的），
+   顺带治窄卡折行。图标用内联 SVG（零图标库），悬停/危险态与 workbuddy 同款。 */
+.cd-status{display:flex;align-items:center;gap:8px;margin:0 0 7px;min-width:0}
+.cd-status .cd-pill{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cd-utils{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:auto}
+.cd-icon-btn{width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;background:var(--btn-sec);color:var(--mut);cursor:pointer;transition:all .15s;padding:0}
+.cd-icon-btn:hover{background:var(--btn-sec-hover);color:var(--fg)}
+.cd-icon-btn svg{width:15px;height:15px}
+.cd-icon-btn.busy svg{animation:cdspin 1s linear infinite}
+.cd-icon-btn.danger:hover{background:var(--err-soft);color:var(--err);border-color:var(--err-border)}
+@keyframes cdspin{to{transform:rotate(360deg)}}
+/* 操作行统一高度（workbuddy 2026.11.20 对齐修复同款）：显式 line-height:1。 */
+.cd-ops>button{height:28px;padding-top:0;padding-bottom:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:12px;padding-left:10px;padding-right:10px}
+/* 焦点可见性（workbuddy §3 同款）：透明边框的图标钮会吞掉默认焦点环。 */
+:where(button,a,input,select,[tabindex]):focus-visible{
+  outline:2px solid var(--acc);outline-offset:2px;border-radius:6px}
+.cd-card:focus-within{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-ring)}
+/* 减少动效（workbuddy §7 同款）：两个 infinite 旋转必须可关。 */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important;scroll-behavior:auto!important}
+  .spin,.cd-icon-btn.busy svg{animation:none!important}
+}
+/* 窄屏（workbuddy §8 同款）：面板是宿主 iframe，宿主侧栏挤压后 440px 网格会溢出。 */
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr}
+  .summary{padding:12px}
+}
+@media (max-width:520px){
+  .grid{grid-template-columns:1fr}
+  .wrap{padding:16px 12px}
+  .cd-name{max-width:150px}
+  .cd-row1{flex-wrap:wrap}
+  .cd-ops{margin-left:0;width:100%;justify-content:flex-start}
+  .cd-utils{margin-left:auto}
+  .bar{gap:6px}
+  .bar>button{flex:1 1 calc(50% - 3px);padding:8px 10px}
+}
+.cd-msg{margin-top:7px;font-size:11px;color:var(--mut);line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;white-space:normal;word-break:break-word}
 .cd-msg.err{color:var(--err)}
 .field-input{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--fg);min-width:220px;margin-top:8px}
 .field-input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-ring)}
@@ -525,25 +570,31 @@ function renderSummary(){
   var used = (s.total_consumed==null) ? null : num0(s.total_consumed);
   var total = (s.total_granted==null) ? null : num0(s.total_granted);
   var avail = (s.total_available==null) ? ((used!=null && total!=null) ? total-used : null) : num0(s.total_available);
-  /* 条子画的是「手里还剩多少」，与 loomy 面板同一口径：绿色从左边起，随消耗从右端缩短。
-     以前这里画的是「已耗进度」，同一张卡上两条进度条方向相反，读起来就像积分在乱掉。 */
+  /* 条子画的是「手里还剩多少」，与 loomy/workbuddy 同一口径：绿色从左边起，随消耗从右端缩短。 */
   var pct = (avail!=null && total!=null && total>0) ? Math.max(0, Math.min(100, avail/total*100)) : null;
   var notes = (s.notes||[]).map(function(n){ return '<div class="pb-meta pb-warn">'+esc(n)+'</div>'; }).join('');
+  /* 数字一律 .num 等宽（workbuddy §6）：轮询刷新时宽度不跳。 */
+  var meta = sc.length + ' / ' + g.n + ' 个账号 · 可读 <span class="num">'+g.readable+'</span> · 失效 <span class="num">'+g.dead+'</span>'
+    + ' · 读数过期 <span class="num">'+g.stale+'</span> · 已在 CPA <span class="num">'+g.inCpa+'</span> · 未挂进 <span class="num">'+g.outCpa+'</span> · 待核对 <span class="num">'+g.unknownCpa+'</span>';
+  /* 缓存细节行收进主进度条的悬停说明（workbuddy 汇总卡形态：一行 title 讲口径）。
+     桌面端悬停可读，触屏退化为不显示——这些是排障信息，不是主信息。 */
+  var detailTitle = '缓存时间 '+(s.last_attempt_at||'—')
+    + '\n服务器时间 '+(lastPayload.server_time||'—')
+    + '\n刷新窗口 '+(s.refresh_minutes==null?'—':s.refresh_minutes)+' 分钟（窗口内读取零上游调用）'
+    + '\n本次'+(s.served_from_cache?'读的是缓存':'已走上游')
+    + (lastPayload.cache_path ? '\n缓存文件 '+lastPayload.cache_path : '')
+    + '\n\n口径：可用占比 = 总可用 ÷ 总量；绿色从左起、随消耗从右端缩短。'
+    + '\n总可用 '+fmtNum(s.total_available)+' · 总已耗 '+fmtNum(s.total_consumed)+' · 总量 '+fmtNum(s.total_granted);
   box.style.display = 'block';
   box.innerHTML =
       '<div class="summary-hd">'
     +   '<div class="summary-title">积分汇总 · '+esc(FILTER_LABEL[currentFilter]||'全部账号')+'</div>'
-    +   '<div class="summary-meta">'+sc.length+' / '+g.n+' 个账号 · 可读 '+g.readable+' · 失效 '+g.dead+' · 读数过期 '+g.stale+' · 已在 CPA '+g.inCpa+' · 未挂进 '+g.outCpa+' · 待核对 '+g.unknownCpa+'</div>'
+    +   '<div class="summary-meta">'+meta+'</div>'
     + '</div>'
-    + '<div class="pb">'
-    +   '<div class="pb-label"><span>总可用 / 总总量</span><span>'+(pct==null?'—':('可用 '+fmtPct(pct)))+'</span></div>'
+    + '<div class="pb" title="'+esc(detailTitle)+'">'
+    +   '<div class="pb-label"><span>总可用 / 总量</span><span>'+(pct==null?'—':('可用 <span class="num">'+fmtPct(pct)+'</span>'))+'</span></div>'
     +   '<div class="pb-track"><div class="pb-bar" style="width:'+(pct==null?0:pct).toFixed(1)+'%;background:'+(pct==null?'var(--surface-muted)':barColor(pct))+'"></div></div>'
-    +   '<div class="pb-meta">总可用积分 <b>'+fmtNum(s.total_available)+'</b> · 总已耗 <b>'+fmtNum(s.total_consumed)+'</b> · 总量 <b>'+fmtNum(s.total_granted)+'</b></div>'
-    + '</div>'
-    + '<div class="pb-meta">缓存时间 <b>'+esc(fmtStamp(s.last_attempt_at))+'</b>　·　服务器时间 '+esc(textOr(lastPayload.server_time))
-    +   '　·　刷新窗口 '+(s.refresh_minutes==null?'—':esc(String(s.refresh_minutes)))+' 分钟'
-    +   '　·　'+(s.served_from_cache?'本次读的是缓存':'本次已走上游')
-    +   (lastPayload.cache_path?('　·　缓存文件 <code>'+esc(lastPayload.cache_path)+'</code>'):'')
+    +   '<div class="pb-meta">总可用 <span class="num">'+fmtNum(s.total_available)+'</span> · 总已耗 <span class="num">'+fmtNum(s.total_consumed)+'</span> · 总量 <span class="num">'+fmtNum(s.total_granted)+'</span> · 缓存 '+esc(fmtStamp(s.last_attempt_at))+' <span style="color:var(--mut)">（悬停看口径与缓存细节）</span></div>'
     + '</div>'
     + notes;
 }
@@ -601,28 +652,43 @@ function card(a){
             : sesDays < 7 ? '<span class="cd-pill stale" title="'+esc(ses.hint||'')+'">剩 '+sesDays+' 天</span>'
             : '<span class="cd-pill" title="'+esc(ses.hint||'')+'">会话 '+sesDays+' 天</span>';
   var dlNote = dl.note ? '<div class="cd-msg'+(dlOutcome==='failed'||dlOutcome==='needs_login'?' err':'')+'" title="'+esc(dl.note)+'">'+esc(dl.note)+'</div>' : '';
+  /* 账号名（结构照 workbuddy）：label 优先、身份名兜底；identity 徽章只在两者不同且都有值时出现。 */
+  var name = rowName(a);
 
-  return '<div class="cd-card'+(dead?' cd-dead':'')+'" data-in-cpa="'+esc(cpaVerdict(a))+'" data-state="'+(dead?'dead':(stale?'stale':'ok'))+'">'
+  return '<div class="cd-card'+(dead?' cd-dead':'')+'" data-in-cpa="'+esc(cpaVerdict(a))+'" data-state="'+(dead?'dead':(stale?'stale':'ok'))+'" data-id="'+esc(a.id)+'">'
     + '<div class="cd-row1">'
     +   '<div class="cd-name-group">'
-    +     '<span class="cd-name" title="'+esc(rowName(a))+'">'+esc(rowName(a))+'</span>'
+    +     '<span class="cd-name" title="'+esc(name)+'">'+esc(name)+'</span>'
     +     cpaBadge(cpaVerdict(a))
     +     identBadge
     +   '</div>'
-    +   '<div class="cd-ops">'+pill+dlPill+sesPill
-    +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="claimOne(this)" title="立即为这个账号尝试领取每日登录赠送积分（2,000 分）。用的是本机浏览器里已有的登录态，不存密码、不填短信。">领每日积分</button>'
-    +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="openLoginWindow(this)" title="打开这个账号专用的 Edge 登录窗（停在 meoo.com）。在窗口里登录一次，会话落在专用目录里，插件就能自动领积分。会话每 30 天过期一次，过期前点这个按钮重新登录即可。">登录</button>'
-    +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="askPasteSession(this)" title="浏览器里的会话读不到时（浏览器开着会锁住 cookie 文件），可以在这里粘一段 meoo.com 的 Cookie。保存前会核对它是不是这个账号的会话。">粘会话</button>'
-    +     '<button type="button" class="sec" data-id="'+esc(a.id)+'" onclick="askRemove(this)" title="只从本插件的账号文件里删掉这一行；CPA 配置与秒悟账号本身都不动。">移除</button>'
+    +   '<div class="cd-ops">'+pill+dlPill+sesPill+'</div>'
+    + '</div>'
+    + '<div class="cd-status">'
+    +   '<span class="cd-lbl">套餐</span>'
+    +   '<span class="cd-val">'+esc(textOr(plan))+'</span>'
+    +   '<div class="cd-utils">'
+    +     '<button type="button" class="cd-icon-btn" data-action="claim" data-id="'+esc(a.id)+'" title="立即为这个账号尝试领取每日登录赠送积分（2,000 分）。用的是本机浏览器里已有的登录态，不存密码、不填短信。" aria-label="领每日积分：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M1.5 6.5h13"/></svg>'
+    +     '</button>'
+    +     '<button type="button" class="cd-icon-btn" data-action="login" data-id="'+esc(a.id)+'" title="打开这个账号专用的 Edge 登录窗（停在 meoo.com）。在窗口里登录一次，会话落在专用目录里，插件就能自动领积分。会话每 30 天过期一次，过期前点这个按钮重新登录即可。" aria-label="登录：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C4.4 1.5 1.5 4.4 1.5 8s2.9 6.5 6.5 6.5 6.5-2.9 6.5-6.5S11.6 1.5 8 1.5z"/><path d="M1.5 8h13"/><path d="M8 1.5c1.8 1.7 2.8 4 2.8 6.5s-1 4.8-2.8 6.5c-1.8-1.7-2.8-4-2.8-6.5s1-4.8 2.8-6.5z"/></svg>'
+    +     '</button>'
+    +     '<button type="button" class="cd-icon-btn" data-action="cookie" data-id="'+esc(a.id)+'" title="浏览器里的会话读不到时（浏览器开着会锁住 cookie 文件），可以在这里粘一段 meoo.com 的 Cookie。保存前会核对它是不是这个账号的会话。" aria-label="粘会话：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-5.5-5.5"/><path d="M11 3.5h.01"/><path d="M13.5 6h.01"/><path d="M10.5 8.5h.01"/><path d="M12.5 11h.01"/></svg>'
+    +     '</button>'
+    +     '<button type="button" class="cd-icon-btn danger" data-action="remove" data-id="'+esc(a.id)+'" title="只从本插件的账号文件里删掉这一行；CPA 配置与秒悟账号本身都不动。" aria-label="移除账号：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11"/><path d="M6.5 4V2.5h3V4"/><path d="M4 4l.7 9.5h6.6L12 4"/><path d="M6.7 6.8v4.4"/><path d="M9.3 6.8v4.4"/></svg>'
+    +     '</button>'
     +   '</div>'
     + '</div>'
     + '<div class="cd-meta">'
-    +   '<div class="cd-mi"><span class="cd-lbl">套餐</span><span class="cd-val">'+esc(textOr(plan))+'</span></div>'
-    +   '<div class="cd-mi right"><span class="cd-lbl">读数</span><span class="cd-val'+(stale?' warn':'')+'">'+esc(fmtAge(a.age_seconds))+'</span></div>'
+    +   '<div class="cd-mi"><span class="cd-lbl">读数</span><span class="cd-val'+(stale?' warn':'')+'">'+esc(fmtAge(a.age_seconds))+'</span></div>'
+    +   '<div class="cd-mi right"><span class="cd-lbl">已耗 / 总量</span><span class="cd-val">'+fmtNum(a.consumed)+' / '+fmtNum(a.granted)+'</span></div>'
     + '</div>'
     + '<div class="cd-credit-line">'
-    +   '<span class="cd-credit"><span class="cd-lbl">可用积分</span><b>'+fmtNum(a.available)+'</b></span>'
-    +   '<span class="cd-credit dim">已耗 '+fmtNum(a.consumed)+' / 总量 '+fmtNum(a.granted)+(pct==null?'':' · 手里还剩 '+esc(fmtPct(100-pct)))+'</span>'
+    +   '<span class="cd-credit"><span class="cd-lbl">可用积分</span><b class="num">'+fmtNum(a.available)+'</b></span>'
+    +   '<span class="cd-credit dim">'+(pct==null?'':'手里还剩 '+esc(fmtPct(100-pct)))+'</span>'
     + '</div>'
     + bar
     + '<div class="cd-meta" style="margin-top:8px">'
@@ -637,6 +703,18 @@ function card(a){
     + note
     + '</div>';
 }
+
+/* 账号卡事件委托（照 workbuddy 的 data-action 模式）：四个账号级工具钮
+   一律走 .cd-card 上的 data-id，不再在模板里内联 onclick 闭包。 */
+document.addEventListener('click', function(ev){
+  var t = ev.target && ev.target.closest ? ev.target.closest('.cd-icon-btn[data-action]') : null;
+  if(!t) return;
+  var action = t.getAttribute('data-action');
+  if(action === 'claim') claimOne(t);
+  else if(action === 'login') openLoginWindow(t);
+  else if(action === 'cookie') askPasteSession(t);
+  else if(action === 'remove') askRemove(t);
+});
 
 function renderGrid(){
   var rows = scoped();
