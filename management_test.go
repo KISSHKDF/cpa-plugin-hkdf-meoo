@@ -88,6 +88,7 @@ func TestManagementRoutesAreExactlyTheAgreedSurface(t *testing.T) {
 		"POST /plugins/meoo/accounts/add",
 		"POST /plugins/meoo/accounts/remove",
 		"GET /plugins/meoo/models",
+		"POST /plugins/meoo/models/refresh",
 		"POST /plugins/meoo/daily-login",
 		"GET /plugins/meoo/daily-login",
 		"POST /plugins/meoo/daily-login/session",

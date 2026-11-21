@@ -6,11 +6,11 @@
 //	                         makes ZERO upstream calls, which is what makes the
 //	                         panel's 300-second poll free.
 //	POST /refresh            刷新数据: ignore the TTL, re-walk every account now.
+//	GET  /models             the gateway catalogue (zero upstream inside the TTL).
+//	POST /models/refresh     force a catalogue re-walk for the 模型 picker.
 //	POST /accounts/add       store one user-level key. Writes only the plugin's own
 //	                         account file; never CPA's config.
 //	POST /accounts/remove    drop one row by id.
-//	GET  /models             the gateway catalogue, with qwen4-max-preview marked
-//	                         unusable (403 Token-Plan-only, measured).
 //	GET  /panel              the browser UI (a resource route, raw HTML).
 //
 // The panel resource is served as RAW HTML with the outer content type as
@@ -99,7 +99,8 @@ func managementRegistration() managementRegistrationResponse {
 			{Method: "POST", Path: base + "/refresh", Description: "刷新数据: re-walk every account now, ignoring the cache window, and return the full panel payload."},
 			{Method: "POST", Path: base + "/accounts/add", Description: "Store one user-level Meoo key (meoo_ak_…), with an optional label. The key is never echoed back."},
 			{Method: "POST", Path: base + "/accounts/remove", Description: "Remove one stored account by id. Never touches CPA's config or the Meoo account itself."},
-			{Method: "GET", Path: base + "/models", Description: "The model gateway catalogue for the first account that owns a project-level AK, with unusable models marked and explained."},
+			{Method: "GET", Path: base + "/models", Description: "The model gateway catalogue for the first account that owns a project-level AK, with unusable models marked and explained. Cache-first: inside the refresh window this makes zero upstream calls."},
+			{Method: "POST", Path: base + "/models/refresh", Description: "刷新目录: force a gateway catalogue re-walk now, ignoring the cache window, and return the fresh picker payload."},
 			{Method: "POST", Path: base + "/daily-login", Description: "立即领取每日积分: attempt Meoo's daily 2,000-point login reward for every account (or one named by account_id), using the web session already stored in this machine's browser profile."},
 			{Method: "GET", Path: base + "/daily-login", Description: "The daily-login reward state per account: today's outcome, the amount granted and when the batch became effective. No upstream calls."},
 			{Method: "POST", Path: base + "/daily-login/session", Description: "Store a pasted Meoo web-session cookie for one account (the credential the daily reward needs). It is verified against the account's identity before it is stored, and never echoed back."},
@@ -159,6 +160,8 @@ func handleManagement(raw []byte) ([]byte, error) {
 		return okEnvelope(removeAccountResponse(req))
 	case method == "GET" && path == "/models":
 		return okEnvelope(jsonResponse(http.StatusOK, modelsView(false)))
+	case method == "POST" && path == "/models/refresh":
+		return okEnvelope(jsonResponse(http.StatusOK, modelsView(true)))
 	case method == "POST" && path == "/daily-login":
 		return okEnvelope(jsonResponse(http.StatusOK, dailyLoginResponse(req)))
 	case method == "GET" && path == "/daily-login":

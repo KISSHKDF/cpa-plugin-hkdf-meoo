@@ -1,3 +1,34 @@
+## 2026.11.21.6
+
+**「模型」按钮升级为「模型选用」卡网格：勾选启用 + 刷新目录 + 保存选用（主人口径：像 workbuddy 一样列出所有模型、可勾选、可刷新）（2026-11-21）。**
+
+### Added
+
+1. **面板「模型选用」弹窗**（照 workbuddy「模型选用」形态移植）：每个网关模型一张卡
+   （模型名 / 网关 id / 注册别名 / 启用勾选），已注册的勾亮、未注册半透明；顶部
+   「刷新目录」（`POST /models/refresh` 强制重拉网关目录，保留当前勾选）与
+   「保存选用」（二次确认后写回）。不可用模型（网关 403 类）仍带「不可用」胶囊。
+2. **新路由 `POST /plugins/meoo/models/refresh`**：`loadModels(true)` 强制重拉，
+   与 `GET /models` 同一缓存链路，不出现两套目录。
+
+### 写回通路（与 workbuddy 的关键差异，实测探明）
+
+- workbuddy 写宿主 `oauth-excluded-models` 的 `workbuddy-<realm>` 子键；那条通路对
+  **API key 通道无效**（SDK `oauthExcludedModelsForConfig` 对 `authKind=="apikey"`
+  直接返回 nil，`OpenAICompatibility` 结构体也没有 `excluded-models` 字段）。
+- meoo 走宿主 `PATCH /v0/management/openai-compatibility`
+  `{name:"秒悟", value:{models:[完整模型定义…]}}`：未勾选的模型从注册列表移除，
+  勾选的定义**从宿主 GET 原样回传**（不做本地重构）；value 不带 `api-key-entries`
+  等字段 ⇒ 7 把 AK 与其它配置一个字节不动。宿主落盘热重载数秒内生效。
+- 保存前二次确认（全量覆盖是破坏性动作）；宿主条目读取失败时禁用保存（绝不在
+  读不到已保存集合的情况下覆盖）。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- live 实测：宿主 GET `/v0/management/openai-compatibility` 回完整 models 定义
+  （keys 掩码为 null，正合 PATCH 只覆盖出现字段的语义）；路由表面测试收敛到 11 条。
+
 ## 2026.11.21.5
 
 **摘除面板「诊断」「清空缓存」按钮与 GET /health、POST /cache/reset 路由（主人裁定："垃圾而无用"）（2026-11-21）。**

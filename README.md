@@ -162,7 +162,8 @@ declared config surface.
 | POST | `/v0/management/plugins/meoo/refresh` | 刷新数据: full walk now |
 | POST | `/v0/management/plugins/meoo/accounts/add` | store one user-level key + optional label |
 | POST | `/v0/management/plugins/meoo/accounts/remove` | drop one row by id |
-| GET | `/v0/management/plugins/meoo/models` | gateway catalogue, unusable models marked |
+| GET | `/v0/management/plugins/meoo/models` | gateway catalogue for the model picker, unusable models marked (cache-first) |
+| POST | `/v0/management/plugins/meoo/models/refresh` | 刷新目录: force a catalogue re-walk now |
 | POST | `/v0/management/plugins/meoo/daily-login` | 立即领取每日积分: attempt the daily 2,000-point reward (all accounts, or one named by `account_id`) |
 | GET | `/v0/management/plugins/meoo/daily-login` | the daily-reward state per account. Zero upstream calls |
 | POST | `/v0/management/plugins/meoo/daily-login/session` | store a pasted web-session cookie for one account; verified against that account's identity, never echoed |

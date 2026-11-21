@@ -143,6 +143,15 @@ table.ut{width:100%;border-collapse:collapse;font-size:12px}
 table.ut th,table.ut td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
 table.ut th{color:var(--mut);font-weight:600}
 table.ut td.num{text-align:right;font-variant-numeric:tabular-nums}
+/* 模型选用卡（照 workbuddy 形态）：操作条 + 卡片网格，未启用卡半透明。 */
+.mc-bar{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.mc-bar button{white-space:nowrap}
+.mc-note{color:var(--mut);font-size:12px}
+.mc-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.mc-card.mc-off{opacity:.55}
+.mc-id{font-weight:600;font-size:13px}
+.mc-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none}
+.mc-item input{accent-color:var(--acc);margin:0;width:14px;height:14px}
 </style>
 <script>
 /* Early theme sync (before body paint): mirror the CPA parent's data-theme when
@@ -795,40 +804,207 @@ function saveSessionCookie(btn, id){
   });
 }
 
-/* ---------- 模型 ---------- */
-function modelTag(m){
-  if(m && m.usable) return '<span class="cd-pill ok">可用</span>';
-  var note = String((m && m.note)||'');
-  var label = note.indexOf('Token Plan') >= 0 ? '不可用（Token Plan only）' : '不可用';
-  return '<span class="cd-pill dead" title="'+esc(note)+'">'+label+'</span>';
+/* ---------- 模型选用（照 workbuddy「模型选用」形态移植） ----------
+   目录：本插件 GET /models（网关目录，带 usable 标记）；
+   已启用集合：宿主 GET /openai-compatibility「秒悟」条目的 models 别名清单。
+   保存：宿主 PATCH /openai-compatibility {name:"秒悟", value:{models:[完整定义]}} ——
+   未勾选的模型从注册列表移除，勾选的原样保留；keys 等其它字段不在 value 里 = 不动。
+   宿主落盘热重载，数秒内生效。这是宿主配置的**全量覆盖 models 列表**，所以保存前二次确认。 */
+var MCP = { loaded:false, dirty:false, models:[], enabled:null, note:"" };
+function hostApi(path, opts){
+  opts = opts || {};
+  var k = getKey();
+  if(!k){ showAuth(); return Promise.reject(new Error('需要管理密钥')); }
+  return fetch(API + path, {
+    method: opts.method || 'GET',
+    credentials: 'omit',
+    body: opts.body,
+    headers: Object.assign({'Content-Type':'application/json'}, authHeaders(k), opts.headers||{})
+  }).then(function(r){
+    if(r.status===401 || r.status===403){
+      try{ sessionStorage.removeItem(SS_KEY); }catch(e){}
+      showAuth();
+      throw new Error('管理密钥无效或缺失');
+    }
+    return r.json().catch(function(){ return {}; });
+  });
 }
-
+function hostCompatEntry(payload){
+  var groups = null;
+  if(!payload) return null;
+  if(Object.prototype.toString.call(payload) === '[object Array]') groups = payload;
+  else if(Object.prototype.toString.call(payload['openai-compatibility']) === '[object Array]') groups = payload['openai-compatibility'];
+  if(!groups) return null;
+  for(var i=0;i<groups.length;i++){
+    var g = groups[i] || {};
+    if(String(g.name||'').trim() === CPA_ENTRY_NAME) return g;
+    var base = String(g['base-url']||g.baseUrl||'');
+    if(!String(g.name||'').trim() && base.indexOf('meoo') >= 0) return g;
+  }
+  return null;
+}
+function mcEnabledAliases(entry){
+  var out = {};
+  var list = (entry && entry.models) || [];
+  for(var i=0;i<list.length;i++){
+    var m = list[i] || {};
+    if(m.alias) out[String(m.alias)] = true;
+    else if(m.name) out[String(m.name)] = true;
+  }
+  return out;
+}
 function openModels(btn){
-  openModal('模型目录', '<div class="hint">读取中…</div>');
-  api(BASE + '/models').then(function(d){
-    var head = '<div class="hint">目录来自模型网关（项目级 AK）。标成不可用的模型不要当成可用通道。</div>';
-    if(d && d.error){
-      openModal('模型目录', head + '<div class="hint pb-warn">读取失败：'+esc(d.error)+'</div>');
-      return;
+  openModal('模型选用', '<div class="hint">读取中…</div>');
+  Promise.all([api(BASE + '/models'), hostApi('/openai-compatibility')]).then(function(rs){
+    var d = rs[0] || {};
+    var entry = hostCompatEntry(rs[1]);
+    MCP.models = (d.models || []);
+    MCP.enabled = entry ? mcEnabledAliases(entry) : null;
+    MCP.note = String(d.note||'');
+    MCP._default = d.default_model;
+    /* 完整模型定义（PATCH 全量覆盖时原样回传用）：从宿主条目直接取。 */
+    MCP._defs = {};
+    if(entry && entry.models){
+      for(var i=0;i<entry.models.length;i++){
+        var m = entry.models[i] || {};
+        if(m.alias) MCP._defs[String(m.alias)] = m;
+      }
     }
-    var list = (d && d.models) || [];
-    if(!list.length){
-      openModal('模型目录', head + '<div class="hint">'+(d && d.note ? esc(d.note) : '先在动作条上点「刷新数据」走一次发现链，拿到项目级 AK。')+'</div>');
-      return;
-    }
-    var html = head
-      + (d.note ? '<div class="hint pb-warn">'+esc(d.note)+'</div>' : '')
-      + '<table class="ut"><thead><tr><th>模型</th><th>网关 id</th><th>状态</th></tr></thead><tbody>';
-    list.forEach(function(m){
-      html += '<tr><td>'+esc(m.display_name||m.name)+'</td>'
-        + '<td>'+esc(m.name)+'</td>'
-        + '<td>'+modelTag(m)+(m.usable?'':' <span class="cd-msg err">'+esc(m.note||'')+'</span>')+'</td></tr>';
-    });
-    html += '</tbody></table>'
-      + '<div class="hint">默认模型 '+esc(textOr(d.default_model))+'　·　网关 '+esc(textOr(d.gateway))+'</div>';
-    openModal('模型目录', html);
+    MCP.dirty = false;
+    renderModelPicker();
   }).catch(function(e){
-    openModal('模型目录', '<div class="hint">读不到：'+esc(e.message)+'</div>');
+    openModal('模型选用', '<div class="hint pb-warn">读取失败：'+esc(e.message)+'</div>');
+  });
+}
+function mcCount(){
+  var on = 0, total = MCP.models.length;
+  for(var i=0;i<total;i++){
+    var m = MCP.models[i] || {};
+    var gid = 'meoo-' + String(m.name||'');
+    if(MCP.enabled && MCP.enabled[gid]) on++;
+  }
+  return {on:on, total:total};
+}
+function renderModelPicker(){
+  var head = '<div class="hint">目录来自模型网关（项目级 AK）；勾选 = 启用（注册进 CPA「'+esc(CPA_ENTRY_NAME)+'」条目），取消勾选点「保存选用」写回宿主 config.yaml，热加载数秒内生效。标成不可用的模型不建议启用。</div>';
+  if(!MCP.models.length){
+    openModal('模型选用', head + '<div class="hint">'+(MCP.note ? esc(MCP.note) : '先在动作条上点「刷新数据」走一次发现链，拿到项目级 AK。')+'</div>');
+    return;
+  }
+  var c = mcCount();
+  var html = head
+    + (MCP.note ? '<div class="hint pb-warn">'+esc(MCP.note)+'</div>' : '')
+    + '<div class="mc-bar"><button type="button" class="sec" onclick="mcRefresh(this)">刷新目录</button>'
+    + '<button type="button" onclick="mcSave(this)">保存选用</button>'
+    + '<span class="mc-note" id="mcNote">已启用 '+c.on+' / 共 '+c.total+(MCP.enabled===null?' · 宿主条目读取失败，勾选不可保存':'')+(MCP.dirty?' · 有未保存改动':'')+'</span></div>'
+    + '<div class="grid mc-grid">';
+  MCP.models.forEach(function(m, idx){
+    var gid = 'meoo-' + String(m.name||'');
+    var checked = !!(MCP.enabled && MCP.enabled[gid]);
+    var unusable = !m.usable;
+    html += '<div class="cd-card mc-card'+(checked?'':' mc-off')+'" data-idx="'+idx+'">'
+      + '<div class="cd-row1"><div class="cd-name-group">'
+      + '<span class="mc-id" title="网关模型名：'+esc(m.name||'')+'">'+esc(m.display_name||m.name)+'</span>'
+      + (unusable ? '<span class="cd-pill dead" title="'+esc(m.note||'')+'">不可用</span>' : '')
+      + '</div><div class="cd-ops"><label class="mc-item" title="'+(checked?'已注册进 CPA；取消勾选后点「保存选用」写回':'勾选 = 注册进 CPA「'+esc(CPA_ENTRY_NAME)+'」条目')+'">'
+      + '<input type="checkbox" data-mc="'+idx+'"'+(checked?' checked':'')+'> 启用</label></div></div>'
+      + '<div class="cd-meta"><div class="cd-mi"><span class="cd-lbl">网关 id</span><span class="cd-val">'+esc(m.name||'—')+'</span></div>'
+      + '<div class="cd-mi right"><span class="cd-lbl">注册别名</span><span class="cd-val">'+esc(gid)+'</span></div></div>'
+      + '</div>';
+  });
+  html += '</div>'
+    + '<div class="hint">默认模型 '+esc(textOr(MCP._default))+'</div>';
+  openModal('模型选用', html);
+  var box = document.querySelector('.mc-grid');
+  if(box){
+    box.addEventListener('change', function(ev){
+      var t = ev.target;
+      if(!t || !t.getAttribute || t.getAttribute('data-mc')===null) return;
+      MCP.dirty = true;
+      var card = t.closest ? t.closest('.mc-card') : null;
+      if(card) card.classList.toggle('mc-off', !t.checked);
+      var c2 = mcCountLive();
+      var note = $('mcNote');
+      if(note) note.textContent = '已启用 '+c2.on+' / 共 '+c2.total+' · 有未保存改动，点「保存选用」写回';
+    });
+  }
+}
+/* 勾选实时计数：从 DOM 读真值，不依赖渲染时的快照。 */
+function mcCountLive(){
+  var on = 0, total = 0;
+  var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+  for(var i=0;i<boxes.length;i++){ total++; if(boxes[i].checked) on++; }
+  return {on:on, total:total};
+}
+function mcRefresh(btn){
+  busy(btn, true, '刷新中…');
+  api(BASE + '/models/refresh', {method:'POST'}).then(function(d){
+    if(d && d.error){ toast('刷新失败', 'err', d.error); return; }
+    MCP.models = (d.models || []);
+    MCP.note = String((d && d.note)||'');
+    /* 保留当前勾选态：刷新目录只更新候选清单，不重置已选集合。 */
+    var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+    var live = {};
+    for(var i=0;i<boxes.length;i++){
+      var idx = boxes[i].getAttribute('data-mc');
+      var m = MCP.models[idx];
+      if(m) live['meoo-' + String(m.name||'')] = boxes[i].checked;
+    }
+    MCP.enabled = live;
+    renderModelPicker();
+    toast('模型目录已刷新', 'ok', MCP.models.length + ' 个模型');
+  }).catch(function(e){ toast('刷新失败', 'err', e.message); })
+  .then(function(){ busy(btn, false, '刷新目录'); });
+}
+function mcSave(btn){
+  if(MCP.enabled === null){ toast('无法保存', 'err', '宿主「'+CPA_ENTRY_NAME+'」条目读取失败，不能全量覆盖'); return; }
+  if(!MCP.dirty){ toast('没有改动', 'warn', '当前勾选与已保存集合一致'); return; }
+  var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+  if(!boxes.length){ toast('先刷新目录', 'warn'); return; }
+  /* 保存计划：勾选的保留完整模型定义（原样回传），未勾选的从数组移除。
+     全量覆盖是破坏性动作 ⇒ 先确认，取消时一个字节都不写。 */
+  var keepDefs = [];
+  var keepCount = 0;
+  var source = MCP._defs || {};
+  for(var i=0;i<boxes.length;i++){
+    var idx = Number(boxes[i].getAttribute('data-mc'));
+    var m = MCP.models[idx];
+    if(!m) continue;
+    var gid = 'meoo-' + String(m.name||'');
+    if(boxes[i].checked){ keepCount++; if(source[gid]) keepDefs.push(source[gid]); }
+  }
+  if(!keepCount){ toast('至少保留一个模型', 'warn', '全部取消会把「'+CPA_ENTRY_NAME+'」通道的所有模型摘掉'); return; }
+  openModal('保存模型选用？',
+    '<div class="hint">将把 <b>'+keepCount+'</b> 个模型注册进 CPA「'+esc(CPA_ENTRY_NAME)+'」条目（共 '+boxes.length+' 个候选）；未勾选的会从该条目的注册列表移除。</div>'
+    + '<div class="hint">这是对宿主 config.yaml 中「'+esc(CPA_ENTRY_NAME)+'」条目 models 列表的<b>全量覆盖</b>（api-key 等其它字段不动）；宿主热加载后数秒内生效，随时可以勾回来。</div>',
+    '<button type="button" class="sec" onclick="closeModal()">取消</button>'
+    + '<button type="button" onclick="mcDoSave(this)">确认保存</button>');
+}
+function mcDoSave(btn){
+  var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+  var keepDefs = [];
+  var source = MCP._defs || {};
+  for(var i=0;i<boxes.length;i++){
+    if(!boxes[i].checked) continue;
+    var m = MCP.models[Number(boxes[i].getAttribute('data-mc'))];
+    if(m && source['meoo-' + String(m.name||'')]) keepDefs.push(source['meoo-' + String(m.name||'')]);
+  }
+  btn.disabled = true;
+  hostApi('/openai-compatibility', {method:'PATCH', body: JSON.stringify({name: CPA_ENTRY_NAME, value:{models: keepDefs}})}).then(function(d){
+    closeModal();
+    if(d && d.error){ toast('保存失败', 'err', d.error); return; }
+    MCP.dirty = false;
+    var live = {};
+    for(var j=0;j<boxes.length;j++){
+      var m2 = MCP.models[Number(boxes[j].getAttribute('data-mc'))];
+      if(m2) live['meoo-' + String(m2.name||'')] = boxes[j].checked;
+    }
+    MCP.enabled = live;
+    renderModelPicker();
+    toast('选用结果已保存', 'ok', '宿主热加载后数秒内生效；被移除的模型随时可以勾回来');
+  }).catch(function(e){
+    btn.disabled = false;
+    toast('保存失败', 'err', e.message);
   });
 }
 

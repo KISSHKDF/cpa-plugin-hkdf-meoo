@@ -173,8 +173,13 @@ for (const m of cssClean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
   for (const needle of ['已在 CPA', '未挂进 CPA']) {
     if (!html.includes(needle)) failMsg('面板缺少交叉核对结论：' + needle);
   }
-  if (!html.includes('不可用（Token Plan only）')) {
-    failMsg('面板不再标注 unusable 的模型（qwen4-max-preview 这类会看起来像可用通道）');
+  // 2026.11.21.6：模型选用卡网格化了；不可用模型仍走 usable 旗标 + 不可用胶囊，
+  // 且选择器必须保留「刷新目录 / 保存选用 / 确认保存」交互闭环。
+  if (!html.includes('不可用')) {
+    failMsg('面板不再标注 unusable 的模型（网关拒绝的模型会看起来像可用通道）');
+  }
+  for (const needle of ['刷新目录', '保存选用', '确认保存', 'data-mc']) {
+    if (!html.includes(needle)) failMsg('模型选用卡缺少交互契约：' + needle);
   }
 }
 

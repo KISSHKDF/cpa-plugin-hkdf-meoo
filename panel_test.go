@@ -40,6 +40,13 @@ func TestPanelHTMLContract(t *testing.T) {
 		"/accounts/remove",
 		"/refresh",
 		"/models",
+		"/models/refresh",
+		// the model picker (2026.11.21.6, workbuddy-shaped): refresh/save verbs and
+		// the host write-back path with a full-override confirmation.
+		"刷新目录",
+		"保存选用",
+		"/openai-compatibility",
+		"确认保存",
 		// the panel-side cross-check (§7.3) reads CPA's own config path:
 		"/config/api-keys/openai-compatibility",
 		// ... and its three verdicts, plus the entry it looks for:
@@ -47,8 +54,11 @@ func TestPanelHTMLContract(t *testing.T) {
 		"未挂进 CPA",
 		"未知",
 		"秒悟",
-		// qwen4-max-preview (usable:false) must be marked, never counted:
-		"不可用（Token Plan only）",
+		// unusable models render a 不可用 pill keyed off the usable flag (the
+		// Token-Plan wording lives in the backend note, rendered via the title):
+		"不可用",
+		// the picker renders gateway id + alias per card:
+		"注册别名",
 	}
 	for _, needle := range required {
 		if !strings.Contains(string(panelHTML), needle) {
@@ -227,17 +237,15 @@ func TestPanelNeverReadsFullCredentials(t *testing.T) {
 // TestPanelMarksUnusableModelsAndDegradesCrossCheck locks the two meoo-specific
 // behaviours of §7.3 that no other gate can see:
 //
-//   - a model the gateway refuses (qwen4-max-preview: 403, Token-Plan-only) must be
-//     marked `不可用（Token Plan only）` instead of being counted as a channel;
+//   - a model the gateway refuses must be marked 不可用 (the exact Token-Plan
+//     wording lives in the backend payload note; the picker renders 不可用 and
+//     keys off the usable flag, never a hardcoded model id);
 //   - the CPA cross-check is an ADD-ON: when that host path cannot be read the
 //     verdict must fall back to 未知 and the panel must keep rendering the readings
 //     it already has (the call sits behind its own catch).
 func TestPanelMarksUnusableModelsAndDegradesCrossCheck(t *testing.T) {
 	html := string(panelHTML)
 
-	if !strings.Contains(html, "不可用（Token Plan only）") {
-		t.Fatal("an unusable model must be marked 不可用（Token Plan only）")
-	}
 	if !strings.Contains(html, "m.usable") {
 		t.Fatal("the model marking must key off the payload's usable flag, not a hardcoded model id")
 	}
