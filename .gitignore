@@ -32,3 +32,7 @@ _loadtest/
 *.png
 config.yaml.snap*
 DEPLOY-RISK-*.md
+
+# --- brand asset for the plugin-store listing (repo-only; the plugin embeds it as a data URI)
+!assets/
+!assets/logo.png
