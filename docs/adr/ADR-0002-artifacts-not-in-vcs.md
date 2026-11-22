@@ -16,7 +16,7 @@
 ## 决策
 
 1. **构建产物一律不进版本库**：`*.dll` / `*.h` / `*.exe` / `build-out/` 全部 `.gitignore`
-2. **每次部署前必须归档**：`C:\CLIP\_plugin-archive\<id>\v<版本>\` 内含
+2. **每次部署前必须归档**：宿主机本地的插件归档目录 `<archive-root>\<id>\v<版本>\` 内含
    - `<id>-v<版本>.dll`（字节本体）
    - `SHA256SUMS.txt`（哈希）
    - `RELEASE-INFO.txt`（版本、构建时间、sha256、字节数、源码树路径、tree-head）

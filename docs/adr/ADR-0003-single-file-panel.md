@@ -47,7 +47,7 @@ CPA 宿主把插件面板渲染成一个**全屏 iframe**（`PluginResourcePage`
 
 - `CONVENTIONS.md` 第二节：`panel.html` 是根目录允许的例外（`//go:embed` 目标）
 - 各树 `panel.html` 顶部注释：主题 token 对齐 CPA 管理面板
-- `C:\CLIP\_multi-plugins-src\panel-syntax-check.mjs`：抽出 `<script>` 编译检查
+- 舰队共享的 `panel-syntax-check.mjs`（早期单文件版本）：抽出 `<script>` 编译检查
 - 宿主侧：`PluginResourcePage.tsx` 的 `<iframe className={styles.frame} … />`（无 sandbox）
 - 2026-10-23 toast 位置修复即此 ADR 的直接后果：iframe 内 z-index 被层叠上下文锁死，
   只能靠改 CSS 位置避让宿主按钮条

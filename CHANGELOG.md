@@ -1,3 +1,23 @@
+## 2026.11.22.1
+
+**首次公开发布版（GitHub 公开仓库 + 官方插件商店登记）。**
+
+### Changed（发布整备，行为零变化）
+
+- **树内私有信息清零**（发布前独立密钥/隐私扫描的唯一 BLOCKER 类）：`.gitignore`/
+  `CHANGELOG.md`/README/三个 ADR 里的本机绝对路径改通用表述；`scripts/build-ng.ps1`
+  的 gcc 路径从硬编码改为 `$env:CC` → PATH 探测（找不到时给出可操作的报错）；
+  `LICENSE` 署名改公开 GitHub 身份。
+- README 的 Release 一节改为对外口径（发布=本仓库 GitHub Release + 官方商店登记），
+  移除内部舰队路径引用；版本行引用的内部约定文档随之移除。
+- 上游与 ABI 零变化：仍钉 `router-for-me/CLIProxyAPI/v8 v8.0.72`，路由/配置/面板全不动。
+
+### 扫描留痕
+
+- 独立扫描 54 个跟踪文件：真实凭据 0 命中；`accounts_test.go` 的 `sk-` 形态
+  顺序字符测试桩、logo 的 SHA-256 指纹、`*.example.invalid` 测试邮箱判
+  ALLOWED-FIXTURE；7 处本机路径/用户名 BLOCKER 本版清零。
+
 ## 2026.11.21.9
 
 **workbuddy 对齐批次①（审计 2026-11-22）：修好 `make test` + build_entry 三道钉 + README 版本行追平。**
@@ -459,7 +479,7 @@ AK 加权轮询打 api.meoo.host），插件 DLL 不在流量路径上。workbud
 
 **首个交付版本：秒悟（Meoo）只读面板插件（`management_api` only，与 loomy 同形态）。**
 
-秒悟的聊天通道继续由 `C:\CLIP\config.yaml` 的
+秒悟的聊天通道继续由 CPA `config.yaml` 的
 `api-keys.openai-compatibility[name=秒悟]`（项目级 AK）提供；本插件不碰模型流量，
 只把"这个 key 名下有多少积分、什么套餐、属于哪个项目、项目级 AK 是什么"读出来，
 并且**只**读，不改上游任何东西（唯二的写操作是两个 provisioning POST，见下）。

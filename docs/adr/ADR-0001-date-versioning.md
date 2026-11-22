@@ -41,6 +41,6 @@
 
 ## 证据
 
-- `D:\CLAW\work\cpa-plugins\CONVENTIONS.md` 第三节
+- 舰队级《CPA 插件树约定》第三节（内部文档，未随本仓库发布）
 - 各树 `version_guard_test.go` 的 `dateEpochRE = ^\d{4}\.\d{1,2}\.\d{1,2}(\.\d+)?$`
 - 10 棵树现行版本：2026.10.19.7 ~ 2026.10.23.8

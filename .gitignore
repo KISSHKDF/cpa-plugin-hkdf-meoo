@@ -19,7 +19,7 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
-# --- build output: releases live in C:\CLIP\_plugin-archive, not in the source tree
+# --- build output: releases live in the machine-local plugin archive, not in the source tree
 # --- hand-rolled snapshots: git history replaces them (legacy copies archived 2026-10-17)
 _bak*/
 _removed*/

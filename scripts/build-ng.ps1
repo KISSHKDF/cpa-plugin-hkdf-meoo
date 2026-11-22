@@ -1,4 +1,4 @@
-﻿# build-ng.ps1 — the ONLY sanctioned way to build the meoo plugin dll.
+# build-ng.ps1 — the ONLY sanctioned way to build the meoo plugin dll.
 #
 # Template: the cline tree build script (2026-10-13). This tree had NO
 # build entry point at all — every build was a bare `go build -buildmode=c-shared`,
@@ -53,8 +53,20 @@ if ([string]::IsNullOrWhiteSpace($Out)) { $Out = "build-out\meoo-$Version-cshare
 $go = 'C:\Program Files\Go\bin\go.exe'
 if (-not (Test-Path $go)) { throw "go.exe not found at $go" }
 $gofmtBin = Join-Path (Split-Path $go -Parent) 'gofmt.exe'
-$cc = 'C:\Users\xbd\tools\mingw64\bin\gcc.exe'
-if (-not (Test-Path $cc)) { throw "C compiler not found at $cc — cgo cannot build main.go without it" }
+# cgo needs a real C compiler. Probe in order: an explicit $env:CC, then
+# gcc.exe on PATH, then a machine-local mingw64 under the user profile. The
+# toolchain location is machine-local by nature, so it is never hardcoded here
+# (this tree is published publicly).
+$cc = $env:CC
+if (-not $cc) {
+    $ccCmd = Get-Command gcc.exe -ErrorAction SilentlyContinue
+    if ($ccCmd) { $cc = $ccCmd.Source }
+}
+if (-not $cc) {
+    $ccLocal = Join-Path $env:USERPROFILE 'tools\mingw64\bin\gcc.exe'
+    if (Test-Path $ccLocal) { $cc = $ccLocal }
+}
+if (-not $cc -or -not (Test-Path $cc)) { throw "C compiler not found at any known location — set `$env:CC to the full path of gcc.exe or put it on PATH; cgo cannot build main.go without it" }
 $env:CGO_ENABLED = '1'
 $env:CC = $cc
 $env:GOPROXY = 'off'

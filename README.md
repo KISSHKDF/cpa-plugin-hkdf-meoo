@@ -3,7 +3,7 @@
 CPA (CLIProxyAPI) plugin — a read-only 秒悟 (Meoo) panel: points, plan, the project
 each key owns, and the project-level AK the model gateway wants.
 
-**Current version**: `2026.11.21.9` (date-style `YYYY.MM.DD.N`, see `../CONVENTIONS.md`)
+**Current version**: `2026.11.22.1` (date-style `YYYY.MM.DD.N`)
 
 ## What it is
 
@@ -129,15 +129,9 @@ Manual, with the fleet's pinned toolchain:
 
 ## Release
 
-The only release entry for this fleet is:
-
-```
-powershell -NoProfile -ExecutionPolicy Bypass -File D:\CLAW\work\cpa-plugin-updater\gates\ship.ps1 -Only meoo
-```
-
-`ship.ps1` owns the whole order: gates → commit → tag → clean rebuild → manifest →
-immutable archive → transactional hot swap → live verification. Do not copy the DLL
-by hand, do not PATCH `enabled` directly, do not re-use a version number.
+Releases go through the fleet's gate pipeline (gates → commit → tag → clean
+rebuild → manifest → immutable archive → hot swap → live verification); the
+published artifact for external users is the GitHub Release of this repository.
 
 ## Configuration
 
