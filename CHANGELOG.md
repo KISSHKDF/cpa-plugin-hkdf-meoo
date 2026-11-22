@@ -1,0 +1,564 @@
+## 2026.11.22.2
+
+**插件 id 改名 `meoo` → `hkdf-meoo`（对外发布 id 方案，2026-11-22 主人裁定）。**
+
+### Changed（id 改名，路由/配置键跟随）
+
+- 官方插件商店 registry 的 id 必须唯一：127 个现存条目里普通形态的名字已有占用先例。
+  自本版起，本作者全部对外 CPA 插件 id 一律 `hkdf-<id>` 前缀；首个即 `hkdf-meoo`。
+- 一次性落位：`providerName` 常量、全部 `/plugins/hkdf-meoo/...` 管理与资源路由、
+  面板 JS 的 `BASE`、`plugins.configs.hkdf-meoo` 配置键、树目录名
+  `cpa-plugins\hkdf-meoo`、go.mod `module xzy/hkdf-meoo`、构建产物
+  `hkdf-meoo-<版本>-cshared.dll`、部署件 `hkdf-meoo-v<版本>.dll`。
+- **保持不动**（它们是上游服务的名字，不是本插件 id）：上游域名 `meoo.com` /
+  `api.meoo.host`、凭据格式 `meoo_ak_*` / `meoo_project_service_v1.*`、插件自管数据
+  目录 `%USERPROFILE%\.meoo-cpa`（迁移有弄丢已登录会话的风险，且不参与 id 契约）。
+- 升级注意：从 2026.11.21.x 及更早版本升级时，宿主配置节的键要从 `meoo:` 改成
+  `hkdf-meoo:`（refresh_minutes 等值原样搬过去）；旧 `meoo-v*.dll` 从部署目录移除
+  后新件才生效（见 RELEASE-ORDER 与 ship 的 deploy-duplicates 判据）。
+
+### 2026.11.22.1
+
+**首次公开发布版（GitHub 公开仓库 + 官方插件商店登记）。**
+
+### Changed（发布整备，行为零变化）
+
+- **树内私有信息清零**（发布前独立密钥/隐私扫描的唯一 BLOCKER 类）：`.gitignore`/
+  `CHANGELOG.md`/README/三个 ADR 里的本机绝对路径改通用表述；`scripts/build-ng.ps1`
+  的 gcc 路径从硬编码改为 `$env:CC` → PATH 探测（找不到时给出可操作的报错）；
+  `LICENSE` 署名改公开 GitHub 身份。
+- README 的 Release 一节改为对外口径（发布=本仓库 GitHub Release + 官方商店登记），
+  移除内部舰队路径引用；版本行引用的内部约定文档随之移除。
+- 上游与 ABI 零变化：仍钉 `router-for-me/CLIProxyAPI/v8 v8.0.72`，路由/配置/面板全不动。
+
+### 扫描留痕
+
+- 独立扫描 54 个跟踪文件：真实凭据 0 命中；`accounts_test.go` 的 `sk-` 形态
+  顺序字符测试桩、logo 的 SHA-256 指纹、`*.example.invalid` 测试邮箱判
+  ALLOWED-FIXTURE；7 处本机路径/用户名 BLOCKER 本版清零。
+
+## 2026.11.21.9
+
+**workbuddy 对齐批次①（审计 2026-11-22）：修好 `make test` + build_entry 三道钉 + README 版本行追平。**
+
+### Fixed
+
+- **`make test` 假入口**：共享 Makefile 模板的 `test:` 目标调 `scripts/build-ng.ps1 -TestOnly`，但本树 param 块只声明了 `$Version/$Out`——`make test` 一调就死于命名参数错误（workbuddy 2026.11.21.3 修的同款缺陷；2026-11-22 全舰队实测 12 棵在役树 8 棵带这对断腿）。修复照抄 workbuddy：param 补 `[switch]$TestOnly`，主体在代理环境设置后短路到 `go test -count=1 ./...`，不出构件。实跑验证通过。
+- **附带修复**：脚本 BOM 在编辑中丢失——已恢复单 BOM，check-powershell-entry 门禁过。
+- **README 版本行追平**：`2026.11.21.3` → `2026.11.21.9`（审计 #2 的漂移项）。
+- 角色澄清随审计落档：本插件树是**只读面板插件**（能力面仅 ManagementAPI，无 chat 流量），按主人「不走用户请求不列无用功能」裁定，反代类基线对本树不适用。
+
+### Added
+
+- **新增 `build_entry_test.go` 三道 source pin**（照 workbuddy 2026.11.21.3 同款）：TestOnly 参数在位+短路真跑 / -Version 与 VERSION 不一致必须 throw / gcc 前置检查报错文案在位。
+
+
+
+**汇总卡与账号卡转「今日口径」，名称/算法与 workbuddy 逐字对齐（主人裁定：连名称也要对齐）（2026-11-21）。**
+
+### Changed（口径，不是皮）
+
+此前汇总大条画的是累计口径（总可用 ÷ 总量）——对齐 workbuddy 时只换了皮没换算法，
+2026.11.21.7 的"对齐"在这里是假的。本版把算法真正对齐：
+
+1. **汇总大条 = 今日已用 ÷ 今日总量**（workbuddy 2026-10-22.4 主人原话同构）：
+   今日总量 = 今日结算剩余 + 今日已用；基线 = 每号当天第一次 OK 读数的
+   consumed/available（快照新增 `day_key/day_start_consumed/day_start_available`，
+   本地日翻篇即重盖，consumed 回退也重盖防负数）。条宽 = 手里还剩（剩余占比
+   锚定左端、从右端向左缩），颜色按剩余取（>50% warn、>80% err）。
+2. **名称逐字对齐 workbuddy**：标题「积分汇总」→「用量汇总」；「总可用 / 总量」→
+   「今日已用 / 今日总量」；pb-meta =「今日结算剩余 X · 今日已用 Y · 今日总量 Z ·
+   今日获取 +N」；meta 行「可读」→「有数据」。累计口径（总可用/总已耗/总量/
+   已过期）退到悬停 title 作对照，不再画成进度条。
+3. **账号卡**：「可用积分」行改 workbuddy 同名「剩余」+「今日已用 N」（未知不按 0
+   计）+「今日获取 +N」（.cd-gain 绿色强调）+「已过期 N」；累计「已耗 / 总量」
+   改名「累计已耗 / 总量」退居上一行。
+4. **今日获取**：每号 today_gain = 此刻余额 − 日初基线余额（>0 才下发）；
+   汇总 today_gain = 有进账的号之和。
+5. **expired 接进面板**：上游 points 的 totalExpired 一直有返回但插件从没用——
+   过期分会让"可用+已耗 ≠ 总量"且面板无从解释。现在逐行与汇总都下发
+   expired/total_expired，恒等式补全。
+
+### Fixed
+
+- **「已在 CPA 0 · 待核对 7」假数据**：交叉核对调的
+  `/config/api-keys/openai-compatibility` 在 /v0 门 404（宿主只把它挂在 /v8 门，
+  实测），catch 分支把全部账号永远标成未知。现在先试 /v8 门，回落 /v0 与当前门，
+  徽章回到真数据。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- 布局门禁改今日口径断言（「今日已用 / 今日总量」必须存在；累计标题不得再出现）。
+
+## 2026.11.21.7
+
+**积分汇总卡与账号卡全面对齐 workbuddy（主人口径：从架构、功能、源码到外观）（2026-11-21）。**
+
+### 架构口径（先说清与 workbuddy 的分野）
+
+meoo 是**只读监控面板**：模型流量由宿主内置 openai-compatibility 条目直接处理（项目级
+AK 加权轮询打 api.meoo.host），插件 DLL 不在流量路径上。workbuddy 那类插件本体就是
+通道（注册模型、自实现转发）。所以本版**只对齐外观与交互形态，不动数据通路**——
+两套凭据（用户级 AK 查账 / 项目级 AK 走网关）的分工原样保留。
+
+### Changed（面板）
+
+1. **账号卡结构对齐**（照 workbuddy/panel.html:1418 卡片模板）：
+   - 状态胶囊行独立成 `.cd-status`（套餐 + 读数寿命三胶囊），不再与按钮挤一排；
+   - 四个文字钮（领每日积分/登录/粘会话/移除）改为 **32px 图标钮**（`.cd-icon-btn`，
+     内联 SVG 零图标库，危险态移除钮红 hover），收进右对齐 `.cd-utils`——语义分层
+     （日常手势 vs 账号级工具）+ 治窄卡折行，与 workbuddy 2026-10-06 的决策同源；
+   - 事件改 **data-action 委托**（document 级监听 → claim/login/cookie/remove），
+     不再每卡内联 onclick；
+   - 卡内第一排 meta 改「读数 | 已耗 / 总量」，可用积分行只留主数 + 手里还剩百分比，
+     已耗/总量退到上一行（数字行减负，口径不变）。
+2. **汇总卡对齐**（照 workbuddy renderSummary 形态）：
+   - 全部数字统一 `.num` 等宽（workbuddy §6：轮询刷新宽度不跳）；
+   - 「总可用 / 总总量」笔误正名为「总可用 / 总量」；
+   - 缓存细节行（缓存时间/服务器时间/刷新窗口/缓存文件路径）收进主进度条的悬停
+     title——排障信息不再占一整行，触屏退化不显示；主行留「缓存 <时间>（悬停看口径）」。
+3. **CSS 全量收编 workbuddy 界面提档**：焦点可见性（:focus-visible 全局环 +
+   .cd-card:focus-within）、prefers-reduced-motion、窄屏断点（900px 单列 / 520px
+   工具栏两列折行）、.cd-msg 两行封顶截断、.cd-ops 按钮显式高度 + line-height:1。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- 布局门禁同步：汇总条口径断言改「总可用 / 总量」。
+
+## 2026.11.21.6
+
+**「模型」按钮升级为「模型选用」卡网格：勾选启用 + 刷新目录 + 保存选用（主人口径：像 workbuddy 一样列出所有模型、可勾选、可刷新）（2026-11-21）。**
+
+### Added
+
+1. **面板「模型选用」弹窗**（照 workbuddy「模型选用」形态移植）：每个网关模型一张卡
+   （模型名 / 网关 id / 注册别名 / 启用勾选），已注册的勾亮、未注册半透明；顶部
+   「刷新目录」（`POST /models/refresh` 强制重拉网关目录，保留当前勾选）与
+   「保存选用」（二次确认后写回）。不可用模型（网关 403 类）仍带「不可用」胶囊。
+2. **新路由 `POST /plugins/meoo/models/refresh`**：`loadModels(true)` 强制重拉，
+   与 `GET /models` 同一缓存链路，不出现两套目录。
+
+### 写回通路（与 workbuddy 的关键差异，实测探明）
+
+- workbuddy 写宿主 `oauth-excluded-models` 的 `workbuddy-<realm>` 子键；那条通路对
+  **API key 通道无效**（SDK `oauthExcludedModelsForConfig` 对 `authKind=="apikey"`
+  直接返回 nil，`OpenAICompatibility` 结构体也没有 `excluded-models` 字段）。
+- meoo 走宿主 `PATCH /v0/management/openai-compatibility`
+  `{name:"秒悟", value:{models:[完整模型定义…]}}`：未勾选的模型从注册列表移除，
+  勾选的定义**从宿主 GET 原样回传**（不做本地重构）；value 不带 `api-key-entries`
+  等字段 ⇒ 7 把 AK 与其它配置一个字节不动。宿主落盘热重载数秒内生效。
+- 保存前二次确认（全量覆盖是破坏性动作）；宿主条目读取失败时禁用保存（绝不在
+  读不到已保存集合的情况下覆盖）。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- live 实测：宿主 GET `/v0/management/openai-compatibility` 回完整 models 定义
+  （keys 掩码为 null，正合 PATCH 只覆盖出现字段的语义）；路由表面测试收敛到 11 条。
+
+## 2026.11.21.5
+
+**摘除面板「诊断」「清空缓存」按钮与 GET /health、POST /cache/reset 路由（主人裁定："垃圾而无用"）（2026-11-21）。**
+
+### Removed
+
+1. 面板动作条「诊断」「清空缓存」两个按钮及 `openHealth()` / `askReset()` / `doReset()`
+   三个函数与只剩诊断弹窗在用的 `.dump` 样式。
+2. 后端 `GET /plugins/meoo/health` 路由与 `healthReport()`、`POST /plugins/meoo/cache/reset`
+   路由与 `cacheReset()`。发布前核实 cpa-ops、dsh-ops、cpa-plugin-updater 三棵树均无调用方。
+   `abiGuardHealth()` 保留（abi_guard_test.go 自检仍在用）。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- 路由表面测试收敛为 10 条；动作条动词断言 5 → 3（刷新数据 / 模型 / 加账号）。
+
+## 2026.11.21.4
+
+**摘除面板「读缓存」按钮与 GET /usage 路由（主人裁定："是个垃圾而多余的按钮"）（2026-11-21）。**
+
+### Removed
+
+1. 面板动作条「读缓存」按钮与 `openUsage()` 弹窗。它与主面板看的是同一份载荷，而面板首屏
+   （`GET /accounts`）在 60 分钟窗口内本来就是零上游——这个按钮没有独立价值。
+2. 后端 `GET /plugins/meoo/usage` 路由、`usageView()` 与 `assembleView` 的 `cacheOnly`
+   死参数（连同 payload 的 `mode`/`note` 字段）。发布前核实过 cpa-ops、dsh-ops、
+   cpa-plugin-updater 三棵树均无 `/usage` 调用方，纯死路由一并摘除。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- 路由表面测试同步收敛为 12 条；动作条动词断言 6 → 5。
+
+## 2026.11.21.3
+
+**会话到期提醒 + 一键登录窗（A+C 方案的 C；A 的前提实测不成立，如实记录）（2026-11-21）。**
+
+先说 A 为什么没做：主人问「能不能像 workbuddy 一样账号永不过期」。为此把所有凭据通道实测了一遍
+（2026-11-21，全部结论有探测脚本佐证）：
+
+- **开放平台 AK 不能触发发放**：`GET /api/mc/entitlement/init` 回 401 `API_KEY_ROUTE_FORBIDDEN`
+  （带 `X-Meoo-Client: cli` 时）/ 401 `API_KEY_CLIENT_REQUIRED`（不带时）—— 服务器认得 CLI 头但
+  明确禁止 AK 走这个接口；26 个候选端点全 404。
+- **OAuth PKCE 可以纯 HTTP 三步自动完成**（GET /oauth/authorize 抠 `request_id` →
+  POST /oauth/authorize/decision 带 `decision=approve` → 302 带 code → /oauth/token），
+  实测拿到 refresh_token 且**可续期**——但它打 init 回 401 `NEED_LOGIN`：OAuth 令牌不是网页登录态，
+  **读账永不过期可以，领分不行**。
+- **阿里云 SSO 自动续期也不行**：profile 里的长寿阿里云 cookie（`login_current_pk` 360 天、
+  `tfstk` 175 天）不构成 SSO 登录态 —— 带/不带 cookie，`account.aliyun.com/sso/login.htm`
+  返回的页面一字不差（只有 CSRF nonce 不同），都是登录表单。
+
+**结论：秒悟在服务端就把发放锁死在网页会话上，而网页会话 30 天必过期（实测 11-16 登录 →
+12-16 到期，每天调用不续期）。永不过期做不了；能做到的是「每次都自动续上、人只管登录」。**
+
+### Added（C 方案本体）
+
+1. **会话到期提醒**（`sessionExpiryOf` / `sessionExpiryForAccount`）：从该账号 profile 的
+   cookie 库读 `oneday_sid` 的到期时间（只读时间戳列，无需解密）。面板每行多一枚会话胶囊：
+   `会话 24.9 天`（正常）→ 7 天内变黄 `剩 3.2 天` → 过期变红 `会话过期` → 从未登录 `无会话`。
+   WebKit 纪元偏移（1601 vs 1970）是经典差 400 年的坑，live 测试对真 profile 钉住合理区间。
+2. **一键登录窗**（`login_window_windows.go` + `POST /plugins/meoo/daily-login/login-window`）：
+   用该账号自己的 Edge profile（`%USERPROFILE%\.meoo-cpa\edge-profile\<账号id>`）拉起 Edge 停在
+   meoo.com。operator 在窗口里登录一次，会话落进专用目录，插件下一次尝试（后台每小时一轮、
+   或面板按钮）立刻接上 —— `needs_login` 不占用当天（2026.11.21.2 已修）。不跑无头、不在命令行
+   传凭据、不碰别的 profile；10 秒内重复点击只提示不重开（同一 user-data-dir 双实例会争锁）。
+   管理面新路由与面板「登录」按钮同步登记。
+
+### Verification
+
+- 全门禁绿（gofmt / vet / test / race / 面板 JS / 面板 style）。
+- live 测试：到期读取器对真 profile 读出 24.9 天（与脚本直测一致）；2 个 profile 身份匹配不变。
+- goroutine 守卫抓到一处裸 `go func()`（登录窗的 detach 等待），已改走 `safeGo` —— 门禁体系按设计工作。
+
+## 2026.11.21.2
+
+**每日登录赠送积分的三个补丁（2026-11-21，首版 2026.11.21.1 上线后的实机反馈）。**
+
+### Fixed
+
+1. **「需要人工登录」不能把当天锁死。**
+   首版把 `needs_login` 也算成「今天已经尝试过」，于是 operator 就算后来在浏览器里登了、
+   插件也不会再试一次 —— 当天的 2,000 分就白扔了，而且**没有任何提示**。
+   现在 `needs_login` 不占用当天：后台轮与手动按钮都会继续再试，
+   operator 登录完就能被领到（`TestNeedsLoginIsRetriedOnTheSameDay` 钉住）。
+
+2. **operator 看到的是英文内部错误串。**
+   `no session profile for this account: 本机没有属于该账号的已登录浏览器会话…`
+   这种句子出现在面板和日志里，对要动手处理的人毫无帮助。
+   现改为一句人话：**「请在浏览器里登录 meoo.com（阿里云账号），插件会自动复用那个会话；
+   本插件不保存密码、不填短信。」**
+
+3. **读浏览器 cookie 库时的锁。**
+   Chromium 开着的时候会用独占方式持有自己的 cookie 文件，普通读法直接失败
+   （`being used by another process`）。现改为**用共享读方式打开**（`FILE_SHARE_READ|WRITE|DELETE`，
+   只读，绝不写浏览器 profile），再把内容复制到临时文件解析。
+   （Windows 上浏览器进程仍可能持锁不放，此时该 profile 读不到 —— 这是平台限制，
+   不是插件能绕过的；退路见下条「粘会话」。）
+
+### Added
+
+4. **「粘会话」退路：浏览器读不到时可以手工粘一段 Cookie。**
+   新增两条管理路由：`POST /plugins/meoo/daily-login/session`（保存，account_id + cookie）
+   与 `DELETE /plugins/meoo/daily-login/session`（清除）。
+   **保存前必须核对身份**：这段会话要能被秒悟接受，且它的 `open_id` 必须等于该账号的
+   `open_id` —— 不是这个账号的会话一律拒绝保存（`TestAPastedSessionIsAcceptedOnlyForItsOwnAccount`）。
+   Cookie 与用户级 key 同等对待：只存本机账号文件，**永不在任何响应里回显**
+   （`TestSessionCookieIsStoredAndNeverEchoed`）。面板每行多一个「粘会话」按钮。
+   重新粘贴同一个 key **不会**丢掉已存的会话（`TestReaddingTheSameKeyKeepsTheStoredSession`）。
+
+5. **会话来源多一处：operator 平常用的浏览器。**
+   首版只扫 `%USERPROFILE%\.meoo-cpa\edge-profile\<账号id>`（本插件自己那套）。
+   现同时扫描 Edge / Chrome / Brave 的日常 profile（**只读**），按身份认领。
+   实测：账号「好看的风」正是在日常 Edge 里登的，首版看不到它。
+
+### Verification
+
+- 单元与回归测试全绿；新增 2 项变异测试确认用例真能拦住回归：
+  把 `needs_login` 改回「当天锁死」、去掉会话存盘的保密纪律。
+- 实机 live 测试仍全绿（读真 Edge profile、身份自动匹配、今天已领过的账号如实报 `already`）。
+
+## 2026.11.21.1
+
+**新增「每日登录赠送积分」自动领取：每天自动领秒悟的 2,000 分（2026-11-21）。**
+
+### Added
+
+1. **`daily_login.go` — 领取 2,000 分的机制本身。**
+   秒悟的规则是「每日首次登录自动赠送 2,000 积分」，**没有领取按钮，也没有领取端点**：
+   官网 0.0.113 的 3.2 MB bundle 全量扫描无任何 claim/signin/checkin 端点，积分流水是
+   `type=LOGIN_GRANT / operator=SYSTEM / sourceType=DAILY_LOGIN / amount=2000`。
+   唯一的发放触发点是 `GET https://meoo.com/api/mc/entitlement/init` —— 官网 SPA 启动时自己调它
+   （失败按 500/1000/2000/4000 ms 退避重查），另在 `visibilitychange`→visible 时补调。
+   本插件调的就是同一个端点。
+
+2. **判据只看账号自己的账本，响应字段不作数。**
+   每次尝试都先读一次账本作基线，调 `init` 之后再读一次：**账本上出现新的一笔
+   「登录赠送积分」才算领到**。服务端答 `dailyLoginGranted=true` 而账本没动 ⇒ 判「未领到」；
+   账本动了而响应说不清楚 ⇒ 判「已领到」。账本是权威，响应只用来解释。
+   （2026-11-16 实测：2,000 的发放会当场被一笔 -472 的 `POINT_REPAY` 抵扣，余额只涨 1,528 ——
+   所以判据必须落在**批次**上，不能落在余额上。）
+
+3. **凭据是网页会话 Cookie，不是开放平台 AK。**
+   AK（`meoo_ak_…`，Bearer）只能读 `/open/v1/cli-compat/account/points`，**调它不算登录、不发放**
+   （实测：一个只被 AK 天天读、从未真正打开过站点的账号，账本里一笔赠送都没有）。
+   所以这个功能需要**网页会话 Cookie**。本插件从本机浏览器 profile 里取（`session_cookie.go`）：
+   Chromium 经典 v10 加密（`Local State` → DPAPI 解出的 32 字节 AES key → AES-256-GCM，
+   明文前 32 字节是 sha256(host_key) 绑定前缀要剥掉），读取器与解密沿用灵犀树已在本机验证过的实现
+   （`sqlite_min.go` / `chromium_cookie.go` / `dpapi_windows.go` 原样移植，零新依赖、零 cgo）。
+   **不存密码、不填短信、不自动登录** —— operator 自己在浏览器里登一次，插件复用那个会话；
+   会话过期时如实报「需要人工登录」，绝不谎报已领。
+
+4. **profile 与账号的对应靠身份自动认领，不需要人工维护映射表。**
+   开放平台的 `account.userId` 与网页会话的 `open_id` 是**同一个数**（实测：账号 1969 两边都是
+   `1241690576128755`），插件据此把某个浏览器 profile 判给某个账号。
+
+5. **配置项 `daily_login`（默认开）。** 关掉它插件就不再读任何浏览器 profile。
+   管理面新增两条路由：`POST /plugins/meoo/daily-login`（立即领取，可带 `account_id` 只领一个）
+   与 `GET /plugins/meoo/daily-login`（看每个账号今天的状态，零上游调用）。
+   面板每行多一枚状态胶囊（今日 +2,000 / 今日已领 / 待登录 / 今日未领 / 未尝试），
+   动作条多一个「领每日积分」，每行多一个「领每日积分」。
+
+6. **后台自动轮。** 零点翻日后不久（本地日历日，不是 UTC —— 见下）自动尝试一次；机器夜里睡着
+   就在开机后补跑。已领过的账号当天不再打扰上游（`init` 端点**零请求**）。
+
+### Fixed
+
+7. **业务日必须是本地日历日，不能用 `toISOString()`（UTC）。**
+   这是会让整个功能**静默失效**的坑：本地 00:05 时 UTC 还停在前一天，按 UTC 算的「今天」会
+   看到「今天的赠送已经到账」→ 整天跳过 → 一次都领不到。
+   已在 `businessDay()` 钉死并有回归用例（`TestBusinessDayUsesTheLocalCalendarDayNotUTC`），
+   变异测试确认该用例真能拦住回归。
+
+8. **身份核对读不到 open id 时必须「拒绝」，不能「放行」。**
+   第一版把开放平台的 `account.userId` 当 JSON 字符串读，而上游发的是**数字**
+   （如 `1978784341143815`，还超出 float64 的精确表示范围）⇒ id 恒为空 ⇒ 身份核对退化成
+   「这个 profile 是谁就是谁」⇒ **一个账号的会话可能被拿去领另一个账号的奖励**。
+   现改为 `json.Decoder.UseNumber()` 取文本，且「id 读不到 ⇒ 拒绝该会话」，并补了
+   两条回归用例（读不到就拒、属于别人就拒）与变异测试。
+
+### Verification
+
+- 单元与回归测试全绿；**4 项变异测试**逐一确认新用例真能拦住回归：业务日改回 UTC、
+  信任服务端响应而不看账本、去掉「已领过就不请求」的短路、恢复身份核对的放行漏洞。
+- **实机 live 测试**（`MEOO_LIVE_TEST=1`）读本机真 Edge profile：成功解出会话 Cookie 且**站点认**
+  （`/api/v1/user/me` 返回真实身份），2 个 profile 与账号自动匹配成功；
+  对今天已领过的 3 个账号，领取如实报 `already` 而没有谎报。
+- 阴性对照：已领过的账号对 `init` 端点**零请求**；服务端说发了而账本没动 ⇒ 判「未领到」。
+
+## 2026.11.20.2
+
+**新增树卫生守卫：构建产物绝不许留在源码树里（2026-11-20）。**
+
+- 新增 `tree_hygiene_test.go`（`TestTreeHasNoBuildArtifacts`）：扫全树（`build-out/` 与 `.git` 除外）的 `.dll/.h/.exe/.lib/.o/.a`，命中即在 `go test` 阶段报红并打印可执行修复指引（自检编译改用 `go vet`+`go test`；或 `go build -o` 指向树外；正式构件走 `scripts/build-ng.ps1`）。判据与发布门禁 `tree-no-artifacts` 同口径，且同样不读 `.gitignore`。
+- 理由：自检时跑 `go build ./...` 会在含 `package main` 的目录里把可执行文件写到当前目录（`meoo.exe`），产物虽被 `.gitignore` 忽略但门禁扫真实文件系统 ⇒ 每次发版必被拦一次。同树历史已犯过多次，且前几次的记录只写进 CHANGELOG（没人会在 build 前翻它）—— 改成测试守卫才管得住。
+- 阴性对照：放一个 `meoo.exe` 进树 → 断言当场报红并打印修复指引；删除后复跑绿。
+
+## 2026.11.20.1
+
+**截断改为码点安全：账号备注、身份显示名与项目名不再被切成半个汉字（truncate 码点自护）。**
+
+### Fixed
+
+1. **`main.go` 的 `truncate()` 原来是 `s[:n]`——Go 里按字节切。** 这棵树经它限长的全是
+   operator 面对的中文文本：账号 `label`（即人写的备注，80 字节，`accounts.go:272`）、
+   身份显示名（60）、上游文案 `note()`（160，进卡片 note 并落 `accounts.json` / 凭据文件）、
+   management 路由错误（240）、`panicDetail`（240，进错误信封与日志）。一个汉字占 3 字节、
+   emoji 占 4 字节，字节下标经常落在字符中间；切出的孤立尾字节经 `encoding/json` 变成 `U+FFFD`，
+   在卡片上显示成乱码方块，并且每次重写同一条 note 都把它继续带下去。
+   现改为回退到前一个码点边界（新 helper `truncateUTF8Bytes`），**字节上限一个也不变**，
+   结果永远是合法 UTF-8；且 limit ≥ `utf8.UTFMax`（4）时保证至少留下一个完整字符。
+   `truncate()` 的签名与语义（去空白 → 超限才截 → 追加 `…`）不变，全部调用点零改动；
+   ASCII 文本的截断结果**逐字节不变**（有回归用例钉住）。
+2. **`config.go` 的 `clampProjectName` 同样是 `trimmed[:64]`（字节）。** 项目名是 operator 手输
+   文本、经常是中文，这个名字会被 POST 给上游 create-project 接口并持久化在上游——切碎后等于
+   把一个非法 UTF-8 的名字发给站点，回读成了替换字符。现改为 `truncateUTF8Bytes(trimmed, 64)`：
+   **64 字节上限不变**（仍严格不超过旧上限，不会因为修复而发出更长的名字），只是切在码点边界。
+
+### Judged but not changed
+
+- `upstream.go:664` `strings.ToUpper(part[:1])`（模型显示名首字母大写）：切的是 1 字节，不是限长；
+  该值来自网关的机器 id（`qwen3.8-flash` 这类 ASCII slug），判定为不含中文，保留原样。
+- `accounts.go` 的 `keyTail`（`key[len-4:]`，凭据尾部）与 `accountID`（`sha256[:16]` hex）：
+  纯 ASCII 标识符，按字节切与按码点切等价，保留原样。
+
+### Added
+
+- `truncate_test.go`：**8 个**回归用例——①中文边界不碎（`utf8.ValidString` + 无 `U+FFFD` + JSON 往返）；
+  ②emoji（4 字节）边界不碎；③纯 ASCII 与旧 `s[:n]` 逐字节一致；④边界组合例（恰在码点边界 / limit ≤ 0 /
+  原长短于上限原样返回 / limit 小于一个字符时返回完整字符或空串）；⑤`truncate` 包装层端到端；
+  ⑥`note()` 端到端（进卡片 note 的那条路径）；⑦`panicDetail` 端到端；⑧`clampProjectName` 端到端，
+  并额外断言"200 字节 ASCII 名字仍恰好截到 64 字节"（证明上限没被顺手改大或改小）。
+  **阴性对照已做**：把 helper 的 `return s[:cut]` 改回 `return s[:limit]`，8 例中 **7 例稳定变红**
+  （报 "not valid UTF-8"）；唯一保持绿的是第③条——那是刻意钉住"ASCII 不许回归"的对照。
+  改回即全绿。
+
+## 2026.11.16.1
+
+**积分条改画「手里还剩多少」：卡片与汇总条都从右边开始掉，与 loomy 面板同向。**
+
+### Fixed
+
+1. **卡片进度条方向反了**（用户 2026-11-16 反馈「每个具体账号的积分横条是从左向右掉积分的」）。
+   旧模板先画 `cd-seg used`（已耗，灰）再画 `cd-seg`（剩余，绿），于是绿条随消耗**从左往右**
+   长，读起来就像积分从左边被吃掉；loomy 的顺序相反：绿色「剩下的」贴左，灰色「用掉的」挂在
+   右端，条子从右端缩短。现按 loomy 落地，并同 loomy 加 3px 段宽下限（`min-width:3px`，原来
+   写 0，小额剩余会渲染成空条）；零宽段不发节点（有 3px 下限时，发一个 0 宽段会在轨道右端
+   画出一条假灰边，看起来像"已经用掉一点"）。
+2. **汇总条改成同一口径**：原来画的是「总已耗 / 总总量」的已耗进度，颜色按已耗占比取
+   （`barColor(100-pct)`）。同一张卡上两条条子方向相反，是这次「积分到底掉没掉」误读的一半来源。
+   现在画「总可用 / 总总量」，颜色按可用占比取，与卡片条一致。
+3. **卡片百分比文案改成「手里还剩 X%」**（loomy 的写法），避免「已耗 51%」与「绿条 49%」
+   看起来互相矛盾。
+
+### Added
+
+- `panel_layout_test.go: TestCreditBarsDrainFromTheRight`：位置断言（「剩下」段必须在「已耗」段
+  之前）+ 零宽段过滤 + 汇总条口径 + `.cd-seg` 3px 下限。已做阴性对照：把两段顺序换回去，该
+  测试即 FAIL。两段同属一个 class 家族，字符串存在性断言抓不到交换，只能断言位置。
+
+### 兼容性
+
+纯面板渲染变更：不动后端字段、不发上游请求、不改缓存格式。数字仍全部来自上游
+`/cli-compat/account/points`（availableBalance / totalGranted / totalConsumed），取数逻辑未改。
+
+## 2026.11.15.2
+
+**SDK 快照抬钉：CLIProxyAPI v8 零件包 v8.0.16 → v8.0.72（2026-11-15 机队统一行动）。**
+
+### Changed / Why
+
+1. **抬的是什么**：go.mod 里的零件包快照从 2026-10-07 的 v8.0.16 抬到 v8.0.72。插件编译时把 SDK 静态打进 DLL，宿主跑哪个版本与它无关；抬钉只改变"插件上报的协议档位"（SchemaVersion 6 → 10）与可用能力面，不改变宿主对接行为。
+2. **为什么现在抬**：40 天机队停在 v8.0.16（教训 L-903：构建断言把"当时的正确值"写成了永久约束）。抬钉后协议报告面与在跑宿主（同版 v8.0.72）对齐，0·J 欠账清零；Error 结构新增的 retry_after_seconds / credential_scoped 字段与 9 个标准错误码解锁，供后续错误码改造使用（本轮不改行为）。
+3. **行为零变化的依据**：schema 7-10 的每一档都只对"声明了对应能力位"的插件生效，本树未声明任何新能力位（0·J 机会清单口径）；流块瘦身（schema 3/5 起）与管理响应免转义（6 起）在 v8.0.16（schema 6）时已生效。回归：全量 go vet / go test 通过，ship 门禁照常。
+4. **断言口径已同步放宽**：build-ng.ps1 的钉版本断言从"必须等于 v8.0.16"放宽为"必须钉某个具体 v8.x 快照"（防未钉/跟 main，不再锁死具体值）；GOPROXY=off 保留（发版构建依旧离线密闭，可复现性由 go.sum 哈希保障）。
+
+### 2026.11.14.1
+
+**对齐轮（2026-11-13/14 全 fleet 审计）：过时测试注释改写为已闭环审计记录。**
+
+### Fixed
+
+1. `panel_test.go` 头部注释此前断言「scripts/panel-js-check.mjs 仍是 OXION 拷贝、本树门禁
+   必红」+「dead-declaration 白名单条目待登记」——两项外部门禁事务**均已于 2026-11-13 落地**
+   （脚本换成本树 22-id 骨架并实测通过；`config/api-keys/openai-compatibility` 已登记进
+   dead-declaration.whitelist.json），注释却没跟着回改，读者会被误导以为门禁坏着（batch2
+   审计抓出）。改写为「已闭环」审计记录，保留原判据与解法出处。
+
+### 兼容性
+
+无任何行为变更：只改注释文字。路由、面板、发现链一字未动。
+### 2026.11.13.4
+
+**品牌头像：插件列表里不再是一枚通用"插头"图标。**
+
+### Added
+
+1. **`logo.go`：PNG data URI 头像**（64x64，取自 meoo.com 首页 `<link rel="icon">` 声明的
+   官方站点图标）。宿主的管理界面用 `<img src=...>` 画 `metadata.Logo`，此前该值是空串、界面
+   回落到通用占位图标 —— 和 loomy 并排时认不出谁是谁。填 **data URI 而不是 https 外链**的
+   理由：管理界面由本机 localhost 提供，外链会让一枚 56px 的装饰性图标依赖第三方 CDN，并在
+   每次打开插件列表时外发一次请求。取舍、素材出处与哈希记在
+   `docs/adr/ADR-0004-brand-logo.md`。
+2. **`logo_test.go`：头像契约门禁**（同 loomy）。断言 data URI 前缀、base64 可解、PNG magic
+   正确、IHDR 边长 ≥32 —— 空串或截断粘贴不会让本树其它任何判据变红，所以这条断言是必需的。
+
+### 兼容性
+
+无行为级变更：只改了注册结构的 `Logo` 字段并新增常量与测试。账号解析链、管理路由与面板
+一字未动（本版不含对发现链的改动，那是 2026.11.13.3）。
+### 2026.11.13.3
+
+**修订：项目选择改为「带云实例的那个项目」——实机走查发现的缺陷。**
+
+首个交付版本（2026.11.13.2）的选择规则是「projects 列表里第一个 `status=active` 的项目」。
+实机上一个账号名下有 3 个 active 项目，只有第 3 个（`l1l7coxwlq0f`）带云实例、也只有它
+能取到项目级 AK；插件选了第 1 个，随后云服务开通又被 Free 套餐的实例上限拒掉，于是面板
+对**一个有可用项目级 AK 的账号**显示「还没有项目级 AK」——读数与事实相反。
+
+### Fixed
+
+1. **只读探测兜底**：`identity → projects（第一个 active）→ cloud → environment` 这条单发
+   流程**一行未改**；只有当它**没能**拿到项目级 AK 时，才对**其余** active 项目追加一次
+   **只读**探测（已存 url_id 优先，其余按列表顺序）：读 cloud state，只有 `enabled=true`
+   才继续读 environment，拿到非空 `meoo_project_api_key` 即采用该项目。
+2. **探测阶段结构性禁止写操作**：`probeProjectAK` 里不存在 `enableCloud` / `createProject`
+   调用路径（不是靠开关守着）。阴性对照测试用假服务器断言「零 POST」钉住这一点：探测不得
+   为候选项目开通云服务或新建项目——那会撞套餐实例上限，也会在账号里留下垃圾资源。
+3. **note 诚实**：改选时追加「已改选带云服务的项目 `<url_id>`」并保留原有 notes；探测过但
+   没找到时追加「已检查其余 N 个项目，均无可用项目级 AK」；单项目或首个 active 即命中时
+   **不加任何 note、不发任何探测请求**（调用序列与 2026.11.13.2 逐字一致）。
+4. **回归测试**：新增 4 个测试函数 / 8 个子用例——正例（3 项目取第 3 个）、阴性对照
+   （全无云实例时零写操作）、不回归（单项目与首个即命中时调用序列逐字不变）、端到端
+   （`refreshAll → assembleView` 面板行 `project_ak_state=ok`）。覆盖率 79.8% → 81.0%。
+   变异自证：禁用探测 / 探测里插 `enableCloud` / 忽略 `cloud.Enabled` 三种变异全部判红。
+
+### 2026.11.13.2
+
+**首个交付版本：秒悟（Meoo）只读面板插件（`management_api` only，与 loomy 同形态）。**
+
+秒悟的聊天通道继续由 CPA `config.yaml` 的
+`api-keys.openai-compatibility[name=秒悟]`（项目级 AK）提供；本插件不碰模型流量，
+只把"这个 key 名下有多少积分、什么套餐、属于哪个项目、项目级 AK 是什么"读出来，
+并且**只**读，不改上游任何东西（唯二的写操作是两个 provisioning POST，见下）。
+
+### Added
+
+1. **账号自管存储** `%USERPROFILE%\.meoo-cpa\accounts.json`（原子写：临时文件 +
+   `os.Rename`；目录 0700 / 文件 0600）。首次启动创建空文件，**不预置任何账号**。
+   两套凭据在同一个文件里：用户级 `meoo_ak_…`（走开放平台）与项目级
+   `meoo_project_service_v1.…`（走模型网关）。
+2. **发现链**（每账号一轮）：`identity → projects（第一个 status=active）→ cloud
+   （未开通则开通）→ environment（取项目级 AK）→ points → entitlement`，全部
+   打在 `https://meoo.com/open/v1`，`Authorization: Bearer <用户级 key>`。
+3. **凭据族本地拦截**：把项目级 key 发给开放平台（或把用户级 key 发给模型网关）
+   在**建请求之前**就被拒，并指明族别。否则上游回 401，看起来跟"账号失效"一模一样,
+   面板会为一个粘贴错误宣布账号死亡。
+4. **只读面板** `/v0/resource/plugins/meoo/panel`（裸 HTML，`Content-Type:
+   text/html; charset=utf-8`，`Cache-Control: no-store`）：账号网格、积分/已耗、
+   套餐、项目 url_id + 项目名、项目级 AK 尾号、key 尾号、状态胶囊、汇总卡。
+5. **管理路由 8 条**（`/accounts`、`/refresh`、`/usage`、`/accounts/add`、
+   `/accounts/remove`、`/models`、`/cache/reset`、`/health`）。`/accounts`、
+   `/refresh`、`/usage`、`/accounts/add`、`/accounts/remove` 回**同一个载荷形状**；
+   `/accounts/add` 失败时也回那个形状（外加 `"error"`），因为面板在错误时正好最需要
+   看到原因。`/quota` 是宿主保留路径，本插件不使用。
+6. **TTL 缓存 + 后台刷新 + 手动刷新**：`refresh_minutes` 默认 60（1..1440）。
+   TTL 内读面板零上游调用；后台 tick 保持缓存热；`/refresh` 忽略窗口重走一轮。
+   同一时刻只允许一轮扫描（single-flight），手动刷新与后台 tick 不会叠成 2×4 并发。
+7. **三个配置键全部有真实消费链**（`dead-declaration` 门禁 GREEN）：
+   `refresh_minutes`（TTL + tick 周期）、`auto_provision`（是否自动建项目/开云服务）、
+   `project_name`（建项目时用的名字）。`enabled` 仍被解析与回显，但**不在声明面上**
+   （声明面严格等于规格书 §6 的三键）。
+8. **模型目录** `/models`：用第一个带项目级 AK 的账号读
+   `https://api.meoo.host/meoo-ai/compatible-mode/v1/models`，与读数同一个 TTL。
+   `qwen4-max-preview` 标记为 `usable:false` 并给出原因（网关固定 403 Access denied,
+   阿里云限定 Token Plan，与账号无关）。
+
+### 本机机队踩过的坑，本树逐条对治
+
+| 坑 | 处置 |
+|---|---|
+| `pluginapi.ManagementRoute` 无 json tag，序列化出 PascalCase，宿主按小写解 → **每条路由静默 404** | `management.go` 用自定义镜像 struct + 小写 tag；`TestManagementRegistrationMirrorsUseLowercaseTags` 钉死 |
+| 面板 HTML 套进 JSON 信封 → 浏览器显示信封源码而不是面板 | 面板走 `ManagementResponse.Body` 裸 HTML，HTTP 头 `text/html`；`TestPanelResourceServesRawHTML` 钉死（含 `/v8` 与 `/v0` 两扇门） |
+| `host.http.do` 回包是 PascalCase（`pluginapi.HTTPResponse` 无 tag），按 `status_code` 解 → **静默拿到 0**，真 403 变成"站点没答" | 回包按 `{"StatusCode","Headers","Body"}` 解；状态 0 一律当失败（回落直连），绝不当成功；`TestHostHTTPResponseWireIsPascalCase` 钉死 |
+| panic 穿过 cgo 帧会 abort **整个 CPA 进程** | 入口 `cliproxy_plugin_init` / `cliproxyPluginCall` 各有 recover；所有后台 goroutine 只经 `safeGo`（静态门禁钉死裸 `go func(` 计数 = 1）；panic 明细有界且非 string/error 只留类型 |
+| ABI 长度闸门复制来的是 `1<<31-1` | 改成机队口径 `256 << 20`，并在 `C.GoBytes` **之前**判定；`abi_guard_test.go` 断言 `<= 256<<20 && < 1<<31` |
+| 凭据回显进面板/API | 面板与 API **只**回 `id`（sha256 前 16 hex）、`key_tail`、`project_ak_tail`（各后 4 位）；`TestAccountViewNeverEchoesFullKey` 钉死；上游文本进 note/日志前先过 `redactSecrets` |
+| 上游文本无界进日志 | `note()` 截断到 160 字节并先脱敏 |
+
+### 安全与代价
+
+- 上游调用**全部只读**，唯二例外：`POST /cli-compat/projects`（建项目）与
+  `POST /cli-compat/projects/{url_id}/cloud`（开云服务），两者都受 `auto_provision`
+  控制，且仅在账号确实没有 active 项目 / 云服务未开通时才发。
+- 直连回退（仅无宿主时）带 `CheckRedirect` 跨源拒跳：这两个请求都在头里带凭据,
+  Go 默认客户端会把头复制到重定向目标。
+- `清空缓存` 只清读数与模型目录缓存，**不碰**账号文件（两个文件分开存，正是为了让
+  这个按钮不可能毁掉凭据）。
+
+### 兼容性
+
+全新插件，无历史版本。宿主 ABI：`ABIVersion=1`、`SchemaVersion=6`。
+只声明 `management_api`；`model_provider` / `auth_provider` / `executor` /
+`quota_provider` / `usage_plugin` / `scheduler` 全为 false。

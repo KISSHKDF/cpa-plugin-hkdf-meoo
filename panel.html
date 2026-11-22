@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meoo 秒悟 · 账号面板</title>
+<style>
+/* Theme tokens copied verbatim from the house reference (workbuddy/panel.html).
+   default :root = light (paper); data-theme=white | dark; embedded iframe syncs parent. */
+:root{
+  --bg:#faf9f5;--card:#ffffff;--border:#e3e1db;--fg:#2d2a26;--mut:#6d6760;
+  --acc:#4c8dff;--on-acc:#ffffff;--ok:#10b981;--warn:#e0aa14;--err:#c65746;
+  --surface:#f0eee8;--surface-muted:#e9e6df;--btn-sec:#eef1f6;--btn-sec-hover:#e4e8ef;
+  --input-bg:#ffffff;--code-bg:#f3f4f6;--code-fg:#374151;--placeholder:rgba(109,103,96,.55);
+  --ok-soft:rgba(16,185,129,.10);--ok-border:rgba(16,185,129,.30);
+  --warn-soft:rgba(224,170,20,.12);--warn-border:rgba(224,170,20,.32);
+  --err-soft:rgba(198,87,70,.10);--err-border:rgba(198,87,70,.30);
+  --danger:#b91c1c;--danger-soft:rgba(185,28,28,.12);--danger-border:rgba(185,28,28,.45);
+  --mut-soft:rgba(109,103,96,.12);--mut-border:rgba(109,103,96,.28);
+  --scrim:rgba(45,42,38,.35);--toast-shadow:0 10px 28px rgba(0,0,0,.12),0 0 0 1px rgba(0,0,0,.04);
+  --modal-shadow:0 24px 56px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.04);
+  --acc-ring:rgba(76,141,255,.18);--radius-md:12px;--radius-lg:16px;
+  color-scheme:light
+}
+:root[data-theme="white"]{
+  --bg:#f5f5f5;--card:#ffffff;--border:#e6e6e6;--fg:#1f1f1f;--mut:#707070;
+  --surface:#fafafa;--surface-muted:#efefef;--btn-sec:#f0f0f0;--btn-sec-hover:#e8e8e8;
+  --input-bg:#ffffff;--code-bg:#f3f4f6;--code-fg:#374151;--placeholder:rgba(112,112,112,.55);
+  --scrim:rgba(0,0,0,.32);--toast-shadow:0 10px 28px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.04);
+  --modal-shadow:0 24px 56px rgba(0,0,0,.16),0 0 0 1px rgba(0,0,0,.04);
+  color-scheme:light
+}
+:root[data-theme="dark"]{
+  --bg:#1e1d1b;--card:#26241f;--border:#3a3833;--fg:#ede9e3;--mut:#9a948c;
+  --acc:#4c8dff;--on-acc:#ffffff;--ok:#34d399;--warn:#f0c050;--err:#e07a6a;
+  --surface:#2f2d28;--surface-muted:#35332e;--btn-sec:#35332e;--btn-sec-hover:#3f3c36;
+  --input-bg:#1e1d1b;--code-bg:#35332e;--code-fg:#d6d1c9;--placeholder:rgba(154,148,140,.55);
+  --ok-soft:rgba(52,211,153,.12);--ok-border:rgba(52,211,153,.38);
+  --warn-soft:rgba(240,192,80,.14);--warn-border:rgba(240,192,80,.38);
+  --err-soft:rgba(224,122,106,.12);--err-border:rgba(224,122,106,.38);
+  --danger:#f87171;--danger-soft:rgba(248,113,113,.16);--danger-border:rgba(248,113,113,.50);
+  --mut-soft:rgba(154,148,140,.16);--mut-border:rgba(154,148,140,.32);
+  --scrim:rgba(0,0,0,.55);--toast-shadow:0 10px 28px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03);
+  --modal-shadow:0 24px 56px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.04);
+  --acc-ring:rgba(76,141,255,.28);
+  color-scheme:dark
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:20px}
+/* .bar has NO justify-content on purpose: flex-start is the house rule, the
+   action buttons start at the left edge under the title. */
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+button{background:var(--acc);color:var(--on-acc);border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;white-space:nowrap}
+button.sec{background:var(--btn-sec);color:var(--fg)}button.sec:hover{background:var(--btn-sec-hover)}button:disabled{opacity:.5;cursor:default}
+.toggle{display:flex;gap:8px;align-items:center;color:var(--mut);font-size:13px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--on-acc);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading{color:var(--mut);text-align:center;padding:40px}
+.card,.summary{background:var(--card);border:1px solid var(--border);border-radius:12px}
+.card{padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:10px}
+.filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.ftag{background:var(--surface);border:1px solid var(--border);color:var(--mut);border-radius:99px;padding:5px 14px;font-size:12px;cursor:pointer;font-weight:600}
+.ftag.active{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
+.ftag .cnt{font-size:10px;opacity:.75;margin-left:4px}
+/* 筛选胶囊与全局开关之间一根细分隔线：胶囊=筛选视图，开关=全局行为。 */
+.filter-sep{width:1px;align-self:stretch;min-height:18px;margin:0 4px;background:var(--border)}
+.auto-checkin{gap:6px;padding:5px 12px 5px 10px;border:1px solid var(--border);border-radius:99px;background:var(--surface);cursor:pointer;font-size:12px;user-select:none}
+.auto-checkin:hover{border-color:var(--mut)}
+.auto-checkin input{accent-color:var(--acc);margin:0}
+/* checkbox 显式尺寸：没有它，一条裸 input 规则就能把开关撑成大方块。 */
+.filter-bar input[type="checkbox"]{width:15px;height:15px;flex:none;padding:0;margin:0}
+.summary{padding:16px;margin-bottom:14px}
+.summary-hd{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.summary-title{font-weight:700;font-size:14px}
+.summary-meta{color:var(--mut);font-size:12px}
+.pb{margin-top:10px}
+.pb-label{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-bottom:6px;gap:12px;flex-wrap:wrap}
+.pb-track{height:8px;background:var(--surface-muted);border-radius:99px;overflow:hidden}
+.pb-bar{height:100%;background:var(--ok);border-radius:99px;transition:width .6s ease}
+.pb-meta{font-size:11px;color:var(--mut);margin-top:6px;line-height:1.6}
+.pb-meta b{color:var(--fg)}
+.pb-warn{color:var(--warn)}
+.pb-meta.pb-warn{color:var(--warn)}
+/* ===== 账号卡（结构照抄 house reference 的 .cd-card） ===== */
+.cd-card{position:relative;padding:11px 12px 12px;border-radius:12px;background:var(--card);border:1px solid var(--border);transition:background .12s,border-color .12s;min-width:0;-webkit-user-select:text;user-select:text}
+.cd-card:hover{background:var(--btn-sec-hover);border-color:var(--mut)}
+.cd-card.cd-dead{opacity:.62;border-color:var(--err-border)}
+.cd-row1{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:28px;margin-bottom:7px;flex-wrap:wrap}
+.cd-name-group{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;flex:1 1 auto}
+.cd-name{font-size:14px;font-weight:600;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cd-badge{display:inline-flex;align-items:center;font-size:10px;line-height:1;padding:3px 7px;border-radius:999px;font-weight:500;background:var(--surface);color:var(--mut);white-space:nowrap}
+.cd-badge.ok{color:var(--ok);background:var(--ok-soft)}
+.cd-badge.no{color:var(--warn);background:var(--warn-soft)}
+.cd-badge.unknown{color:var(--mut);background:var(--mut-soft)}
+.cd-ops{display:flex;gap:6px;flex-shrink:0;align-items:center;margin-left:auto}
+.cd-pill{display:inline-flex;align-items:center;height:22px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid var(--border);background:transparent;color:var(--mut)}
+.cd-pill.ok{color:var(--ok);border-color:var(--ok)}
+.cd-pill.dead{color:var(--err);border-color:var(--err)}
+.cd-pill.stale{color:var(--warn);border-color:var(--warn)}
+.cd-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;font-size:12px}
+.cd-mi{display:flex;align-items:center;gap:6px;min-width:0}
+.cd-mi.right{justify-content:flex-end;flex-shrink:0}
+.cd-lbl{color:var(--mut);flex-shrink:0;white-space:nowrap}
+.cd-val{color:var(--fg);font-variant-numeric:tabular-nums;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cd-val.warn{color:var(--danger);font-weight:700}
+.cd-credit-line{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;font-size:12px}
+.cd-credit{display:inline-flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
+.cd-credit b{font-weight:700}
+.cd-credit.dim{color:var(--mut)}
+/* 今日获取（workbuddy 2026.11.15.1 同款）：今天的进账，绿色强调。 */
+.cd-gain{color:var(--ok);font-weight:600}
+.cd-bar{display:flex;gap:2px;width:100%;height:10px;background:var(--surface-muted);border-radius:5px;overflow:hidden}
+.cd-seg{display:block;height:10px;min-width:3px;background:var(--ok);opacity:var(--a,1)}
+.cd-seg.used{background:var(--mut-soft)}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.pb-meta .num{font-weight:600;color:var(--fg)}
+/* ===== 2026.11.21.7 全面照抄 house reference（workbuddy/panel.html）=====
+   卡片结构对齐：①状态胶囊独占一行（.cd-status），业务钮留 .cd-ops；
+   ②账号级工具钮（领分/登录/粘会话/移除）改 32px 图标钮收进 .cd-utils，
+   与业务钮分行——语义分层（日常手势 vs 账号级工具，移除是破坏性的），
+   顺带治窄卡折行。图标用内联 SVG（零图标库），悬停/危险态与 workbuddy 同款。 */
+.cd-status{display:flex;align-items:center;gap:8px;margin:0 0 7px;min-width:0}
+.cd-status .cd-pill{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cd-utils{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:auto}
+.cd-icon-btn{width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;background:var(--btn-sec);color:var(--mut);cursor:pointer;transition:all .15s;padding:0}
+.cd-icon-btn:hover{background:var(--btn-sec-hover);color:var(--fg)}
+.cd-icon-btn svg{width:15px;height:15px}
+.cd-icon-btn.busy svg{animation:cdspin 1s linear infinite}
+.cd-icon-btn.danger:hover{background:var(--err-soft);color:var(--err);border-color:var(--err-border)}
+@keyframes cdspin{to{transform:rotate(360deg)}}
+/* 操作行统一高度（workbuddy 2026.11.20 对齐修复同款）：显式 line-height:1。 */
+.cd-ops>button{height:28px;padding-top:0;padding-bottom:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:12px;padding-left:10px;padding-right:10px}
+/* 焦点可见性（workbuddy §3 同款）：透明边框的图标钮会吞掉默认焦点环。 */
+:where(button,a,input,select,[tabindex]):focus-visible{
+  outline:2px solid var(--acc);outline-offset:2px;border-radius:6px}
+.cd-card:focus-within{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-ring)}
+/* 减少动效（workbuddy §7 同款）：两个 infinite 旋转必须可关。 */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important;scroll-behavior:auto!important}
+  .spin,.cd-icon-btn.busy svg{animation:none!important}
+}
+/* 窄屏（workbuddy §8 同款）：面板是宿主 iframe，宿主侧栏挤压后 440px 网格会溢出。 */
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr}
+  .summary{padding:12px}
+}
+@media (max-width:520px){
+  .grid{grid-template-columns:1fr}
+  .wrap{padding:16px 12px}
+  .cd-name{max-width:150px}
+  .cd-row1{flex-wrap:wrap}
+  .cd-ops{margin-left:0;width:100%;justify-content:flex-start}
+  .cd-utils{margin-left:auto}
+  .bar{gap:6px}
+  .bar>button{flex:1 1 calc(50% - 3px);padding:8px 10px}
+}
+.cd-msg{margin-top:7px;font-size:11px;color:var(--mut);line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;white-space:normal;word-break:break-word}
+.cd-msg.err{color:var(--err)}
+.field-input{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--fg);min-width:220px;margin-top:8px}
+.field-input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-ring)}
+/* 右下角滑入通知栈 */
+.toasts{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:10px;z-index:9999;max-width:360px}
+.toast{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--acc);border-radius:var(--radius-md);padding:14px 18px;font-size:13px;box-shadow:var(--toast-shadow);transform:translateX(120%);opacity:0;transition:transform .3s cubic-bezier(.2,.9,.3,1.1),opacity .25s;cursor:pointer;word-break:break-all}
+.toast.show{transform:translateX(0);opacity:1}
+.toast.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+.toast.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.toast.err{border-left-color:var(--err);background:var(--err-soft)}
+.toast .t{font-weight:600;margin-bottom:3px}
+.toast .d{color:var(--mut);font-size:12px;line-height:1.45}
+.modal-mask{position:fixed;inset:0;background:var(--scrim);display:none;align-items:center;justify-content:center;z-index:9000;padding:16px}
+.modal-mask.show{display:flex}
+.modal{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-lg);width:min(720px,100%);max-height:min(90vh,720px);display:flex;flex-direction:column;box-shadow:var(--modal-shadow)}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+.modal-hd h2{font-size:15px;margin:0;color:var(--fg);font-weight:600}
+.modal-x{background:transparent;color:var(--mut);padding:4px 10px;font-size:18px;line-height:1}
+.modal-x:hover{color:var(--fg);background:var(--surface-muted)}
+.modal-bd{padding:16px;overflow:auto}
+.modal-bd .hint{color:var(--mut);font-size:12px;margin:0 0 10px;line-height:1.5}
+.modal-ft{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);border-radius:0 0 var(--radius-lg) var(--radius-lg)}
+.modal-ft button.sec{background:var(--btn-sec);color:var(--fg)}
+.modal-ft button.sec:hover{background:var(--btn-sec-hover)}
+table.ut{width:100%;border-collapse:collapse;font-size:12px}
+table.ut th,table.ut td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.ut th{color:var(--mut);font-weight:600}
+table.ut td.num{text-align:right;font-variant-numeric:tabular-nums}
+/* 模型选用卡（照 workbuddy 形态）：操作条 + 卡片网格，未启用卡半透明。 */
+.mc-bar{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.mc-bar button{white-space:nowrap}
+.mc-note{color:var(--mut);font-size:12px}
+.mc-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.mc-card.mc-off{opacity:.55}
+.mc-id{font-weight:600;font-size:13px}
+.mc-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none}
+.mc-item input{accent-color:var(--acc);margin:0;width:14px;height:14px}
+</style>
+<script>
+/* Early theme sync (before body paint): mirror the CPA parent's data-theme when
+   embedded; standalone falls back to prefers-color-scheme. Same semantics as the
+   house reference (workbuddy/panel.html): the DOM attribute is the source of truth. */
+(function(){
+  var ATTR="data-theme";
+  function embedded(){try{return window.self!==window.top}catch(e){return false}}
+  function apply(t){
+    var el=document.documentElement;
+    if(t==="white"||t==="dark")el.setAttribute(ATTR,t);
+    else el.removeAttribute(ATTR);
+  }
+  function parentTheme(){
+    if(!embedded())return null;
+    try{
+      var raw=window.parent.document.documentElement.getAttribute(ATTR);
+      if(raw==="white"||raw==="dark")return raw;
+      return "light";
+    }catch(e){return null}
+  }
+  function systemTheme(){
+    try{return window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}catch(e){return "light"}
+  }
+  function sync(){apply(parentTheme()||systemTheme())}
+  sync();
+  window.__lyThemeSync=function(){
+    sync();
+    if(!embedded()){
+      try{
+        var mq=window.matchMedia("(prefers-color-scheme: dark)");
+        var on=function(){sync()};
+        if(mq.addEventListener)mq.addEventListener("change",on);
+        else if(mq.addListener)mq.addListener(on);
+      }catch(e){}
+      return;
+    }
+    try{
+      var parentEl=window.parent.document.documentElement;
+      new MutationObserver(sync).observe(parentEl,{attributes:true,attributeFilter:[ATTR]});
+      window.addEventListener("storage",function(e){if(e.key==="cli-proxy-theme")sync()});
+    }catch(e){}
+  };
+})();
+</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Meoo 秒悟 · 账号面板</h1>
+  <div class="sub">用户级 <code>meoo_ak_…</code> 的积分、套餐与项目级 AK（模型网关通道）。读数是缓存优先的：刷新窗口内读取零上游调用。</div>
+  <div id="authBox" class="card" style="display:none;margin-bottom:16px">
+    <div class="sub" style="margin:0 0 8px">没从宿主读到 CPA 管理密钥。正常从 CPA 主面板点进来时不该看到这一栏 —— 看到它说明这次是在宿主之外单独打开了面板，或者宿主登录时没勾「记住密码」。</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id="keyInput" type="password" class="field-input" placeholder="CPA 管理密钥（只在需要时填一次）" autocomplete="off">
+      <button onclick="saveKey()">使用并加载</button>
+    </div>
+    <div class="sub" style="margin:8px 0 0;font-size:12px">只存本会话 sessionStorage，不写 localStorage、不留在地址栏。<b>没密钥时面板不发任何请求</b> —— 空密钥会被宿主记一次失败认证，5 次封本机 IP 30 分钟。</div>
+  </div>
+  <div class="bar">
+    <button id="refreshBtn" onclick="load(true,this)" title="立即重走每个账号的发现链（身份 → 项目 → 云服务 → 项目级 AK → 积分 → 权益），并重绘面板。积分查询不扣分。">刷新数据</button>
+    <button class="sec" onclick="claimAll(this)" title="为每个账号尝试领取今日的「每日登录赠送积分」（2,000 分）。插件会复用本机浏览器里已有的登录态，不存密码、不填短信。已经领过的账号不会重复领取。">领每日积分</button>
+    <button class="sec" onclick="openModels(this)" title="模型网关目录（项目级 AK），不可用的模型会被标出来。">模型</button>
+    <button class="sec" onclick="askAdd(this)" title="粘贴一个用户级 meoo_ak_… key（可选备注）；key 只落本插件自己的账号文件。">加账号</button>
+    <span class="toggle" id="metaHint"></span>
+    <span class="toggle" id="svtime"></span>
+  </div>
+  <div class="filter-bar" id="filterBar">
+    <button type="button" class="ftag active" data-filter="all" onclick="filterList('all',this)">全部 <span class="cnt" id="cntAll">0</span></button>
+    <button type="button" class="ftag" data-filter="readable" onclick="filterList('readable',this)">可读 <span class="cnt" id="cntReadable">0</span></button>
+    <button type="button" class="ftag" data-filter="in" onclick="filterList('in',this)">已在 CPA <span class="cnt" id="cntIn">0</span></button>
+    <button type="button" class="ftag" data-filter="out" onclick="filterList('out',this)">未挂进 CPA <span class="cnt" id="cntOut">0</span></button>
+    <button type="button" class="ftag" data-filter="stale" onclick="filterList('stale',this)">读数过期 <span class="cnt" id="cntStale">0</span></button>
+    <button type="button" class="ftag" data-filter="dead" onclick="filterList('dead',this)">失效 <span class="cnt" id="cntDead">0</span></button>
+    <span class="filter-sep" aria-hidden="true"></span>
+    <label class="toggle auto-checkin" title="每 5 分钟读一次宿主缓存；读数在刷新窗口内时零上游调用"><input type="checkbox" id="autoPoll" onchange="setAutoPoll(this.checked)"> 自动轮询(5 分钟)</label>
+  </div>
+  <div class="summary card" id="summaryBox" style="display:none"></div>
+  <div id="grid" class="grid"><div class="loading">加载中…</div></div>
+</div>
+<div class="modal-mask" id="modalMask" onclick="onMaskClick(event)">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-hd">
+      <h2 id="modalTitle"></h2>
+      <button type="button" class="modal-x" onclick="closeModal()" aria-label="关闭">×</button>
+    </div>
+    <div class="modal-bd" id="modalBody"></div>
+    <div class="modal-ft" id="modalFoot"></div>
+  </div>
+</div>
+<div class="toasts" id="toasts"></div>
+<script>
+/* 走哪扇门：从本页面被访问的 URL 反推。v8 同时挂着 /v0/management 与
+   /v8/management，而资源路由形如 <door>/resource/plugins/hkdf-meoo/panel —— 我们是被
+   哪扇门送进来的，就用那扇门调管理 API；形状意外时回落到 /v0。 */
+var DOOR = (function(){ var m = (location.pathname||"").match(/^(\/v\d+)\/resource\/plugins\//); return m ? m[1] : "/v0"; })();
+var API = DOOR + "/management", BASE = "/plugins/hkdf-meoo";
+var SS_KEY = "cpa-meoo-mgmt-key", POLL_MS = 300000, POLL_KEY = "cpa-meoo-autopoll";
+var pollTimer = null, pollBusy = false, authFailUntil = 0, authFailCount = 0;
+var lastPayload = null, currentFilter = "all", hostKeyRejected = false, pendingRemoveId = "";
+/* CPA 侧那条 openai-compatibility 条目的名字（config.yaml 里的 name），
+   面板用它回答「这个账号的项目级 AK 挂进 CPA 了吗」。 */
+var CPA_ENTRY_NAME = "秒悟";
+var CPA = { state: "unknown", keys: [], checked: false };
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function num0(v){ var n = Number(v); return isFinite(n) ? n : 0; }
+/* 后端用指针类型：读不到就是 null。null 一律显示成 —，绝不显示成 0。 */
+function fmtNum(v){ if(v==null) return '—'; var n = Number(v); return isFinite(n) ? n.toLocaleString() : '—'; }
+function fmtPct(p){ if(p==null||!isFinite(p)) return '—'; var v = p>=10 ? Math.round(p) : Math.round(p*10)/10; return v+'%'; }
+function fmtAge(sec){
+  if(sec==null||sec<0) return '还没读过';
+  if(sec<60) return sec+' 秒前';
+  if(sec<3600) return Math.floor(sec/60)+' 分钟前';
+  if(sec<86400) return Math.floor(sec/3600)+' 小时前';
+  return Math.floor(sec/86400)+' 天前';
+}
+function fmtStamp(v){ if(!v) return '还没读过'; try{ return new Date(v).toLocaleString(); }catch(e){ return '—'; } }
+function barColor(pct){ if(pct==null) return 'var(--ok)'; return pct>=60 ? 'var(--ok)' : (pct>=25 ? 'var(--warn)' : 'var(--err)'); }
+function textOr(v){ var s = String(v==null?'':v).trim(); return s ? s : '—'; }
+
+/* ---------- 管理密钥获取（与 workbuddy / zcode / oxion / loomy 同一套 kit） ----------
+   宿主主面板把密钥存在 localStorage["cli-proxy-auth"]，值是
+   "enc::v1::" + base64(XOR(明文, salt|location.host|navigator.userAgent))。
+   本面板是嵌在宿主里的同源 iframe，所以能直接读到它，不必每次手输。
+   三条硬规则（在别的树上用真事故换来的）：
+     1) 解码必须与宿主逐字一致，且只在真的被嵌入时读；
+     2) 没有密钥就渲染输入框并发 0 个请求 —— 空密钥会被宿主记一次失败认证，
+        5 次封本机 IP 30 分钟（loopback 不豁免）；
+     3) 密钥只进 sessionStorage，不写 localStorage、不留在地址栏。
+*/
+/* ---------- management key acquisition (host slot enc::v1:: / enc::v2::) ----------
+   宿主管理面板把密钥存在同源 localStorage["cli-proxy-auth"]：
+     enc::v1::  XOR key = salt | location.host | navigator.userAgent   （面板 <= 19.2）
+     enc::v2::  XOR key = salt | location.host                          （面板 >= 19.3）
+   两个前缀都认，并且读不到时给出原因（见 hostKeyDiag）。 */
+const SECRET_SALT = "cli-proxy-api-webui::secure-storage";
+const PANEL_STORE = "cli-proxy-auth";
+function _enc(t){ return new TextEncoder().encode(t); }
+function _dec(b){ return new TextDecoder().decode(b); }
+function _xor(d,k){ var r=new Uint8Array(d.length); for(var i=0;i<d.length;i++){ r[i]=d[i]^k[i%k.length]; } return r; }
+function _b64d(s){ var bin=atob(s); var b=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++){ b[i]=bin.charCodeAt(i); } return b; }
+/* kit:begin */
+const ENC_V1_PREFIX = "enc::v1::";
+const ENC_V2_PREFIX = "enc::v2::";
+function _isV1(p){ return typeof p === "string" && p.indexOf(ENC_V1_PREFIX) === 0; }
+function _isV2(p){ return typeof p === "string" && p.indexOf(ENC_V2_PREFIX) === 0; }
+/* kitKeyBytes(noUA): v2 dropped the userAgent component, v1 kept it. */
+function kitKeyBytes(noUA){
+  try{ return _enc(SECRET_SALT+"|"+window.location.host+(noUA?"":"|"+navigator.userAgent)); }
+  catch(e){ return _enc(SECRET_SALT); }
+}
+/* deobfuscate(p): recognises both generations; "" when it cannot -- never a fake key. */
+function deobfuscate(p){
+  if(typeof p !== "string") return "";
+  var pre = _isV1(p) ? ENC_V1_PREFIX : (_isV2(p) ? ENC_V2_PREFIX : "");
+  if(!pre) return "";
+  try{ return _dec(_xor(_b64d(p.slice(pre.length)), kitKeyBytes(_isV2(p)))); }
+  catch(e){ return ""; }
+}
+function isEmbedded(){ try{ return window.self !== window.top; }catch(e){ return false; } }
+/* hostKeyDiag(): why is there no key? "" means a key WAS found. */
+function hostKeyDiag(){
+  if(!isEmbedded()) return "本页不是从 CPA 主面板嵌进来的（直接打开了资源页），读不到宿主的密钥槽 —— 请手填一次，或从主面板插件菜单进入。";
+  var raw = "";
+  try{ raw = localStorage.getItem(PANEL_STORE) || ""; }catch(e){ return "浏览器禁止本页读取 localStorage，读不到宿主的密钥槽 —— 请手填一次。"; }
+  if(!raw) return "宿主主面板还没把密钥写进浏览器：去管理面板登录时勾上「记住密码」（否则它不落盘）。";
+  if(!_isV1(raw) && !_isV2(raw)) return "宿主密钥槽的格式不认识（既不是 enc::v1:: 也不是 enc::v2::）—— 管理面板又换了存储格式，本插件需要升级。先手填密钥，并把这条提示报给维护者。";
+  var txt = deobfuscate(raw);
+  if(!txt) return "宿主密钥槽的格式认识，但解出来不是有效内容 —— 多半是 XOR 密钥组成变了（2026-10-31 那次就是 v1→v2 去掉了 userAgent 段）。先手填密钥，并报维护者升级插件。";
+  var st = null;
+  try{ var o = JSON.parse(txt); st = (o && o.state) || o || {}; }catch(e){ return "宿主密钥槽解码后不是 JSON —— 面板存储格式已变，需要升级本插件。"; }
+  if(!st || typeof st.managementKey !== "string" || !st.managementKey.trim()) return "宿主主面板登录时没有勾「记住密码」，所以密钥没有落盘 —— 回管理面板登录时勾上，或在这里手填一次。";
+  return "";
+}
+/* kit:end */
+function ssGet(n){ try{ return sessionStorage.getItem(n)||""; }catch(e){ return ""; } }
+function ssSet(n,v){ try{ sessionStorage.setItem(n,v); }catch(e){} }
+
+function readHostKey(){
+  if(!isEmbedded()) return "";
+  var raw; try{ raw = localStorage.getItem(PANEL_STORE); }catch(e){ return ""; }
+  if(!raw) return "";
+  try{
+    var o = JSON.parse(deobfuscate(raw));
+    var st = (o && o.state) || o || {};
+    return typeof st.managementKey === "string" ? st.managementKey.trim() : "";
+  }catch(e){ return ""; }
+}
+function readUrlKey(){
+  var m = /[?&]key=([^&]+)/.exec(location.search);
+  if(!m) return "";
+  var v = decodeURIComponent(m[1]);
+  /* 地址栏里的密钥不能留在历史里，也不能只活到这一次请求：先存进本会话再抹掉。 */
+  if(v) ssSet(SS_KEY, v);
+  try{ history.replaceState(null,"",location.pathname); }catch(e){}
+  return v;
+}
+function getKey(){
+  var s = ssGet(SS_KEY); if(s) return s;
+  if(!hostKeyRejected){ var h = readHostKey(); if(h) return h; }
+  return readUrlKey();
+}
+function showAuth(reason){
+  var box=$('authBox'); if(!box) return;
+  box.style.display='block';
+  /* 没给理由就问宿主槽为什么读不到 —— 静默弹密码框正是那次事故的形态。 */
+  var why=reason||(typeof hostKeyDiag==='function'?hostKeyDiag():"");
+  var d=box.querySelector('div'); if(why&&d){ d.textContent=why; }
+  var i=$('keyInput'); if(i) i.focus();
+}
+function authHeaders(k){ return {'Authorization':'Bearer '+k}; }
+
+function api(path, opts){
+  opts = opts || {};
+  var k = getKey();
+  if(!k){ showAuth(); return Promise.reject(new Error('需要管理密钥')); }
+  if(Date.now() < authFailUntil){ return Promise.reject(new Error('认证多次失败，稍后再试（防 IP 封禁）')); }
+  return fetch(API+path, {
+    method: opts.method || 'GET',
+    credentials: 'omit',
+    body: opts.body,
+    headers: Object.assign({'Content-Type':'application/json'}, authHeaders(k), opts.headers||{})
+  }).then(function(r){
+    if(r.status===401 || r.status===403){
+      authFailCount++;
+      /* 这次用的可能是宿主那把：宿主换了密钥后继续重读它只会反复 401，
+         所以标记作废，改走手输，避免死循环敲门把本机 IP 敲进小黑屋。 */
+      hostKeyRejected = true;
+      try{ sessionStorage.removeItem(SS_KEY); }catch(e){}
+      showAuth();
+      if(authFailCount>=3){ authFailUntil=Date.now()+60000; authFailCount=0; throw new Error('认证多次失败，60 秒后再试'); }
+      throw new Error('管理密钥无效或缺失');
+    }
+    return r.json().catch(function(){ return {}; });
+  });
+}
+
+/* ---------- toast（右下角滑入，最多 5 条） ---------- */
+function toast(title, kind, detail){
+  var box = $('toasts'); if(!box) return;
+  var el = document.createElement('div');
+  el.className = 'toast ' + (kind||'ok');
+  el.innerHTML = '<div class="t">'+esc(title)+'</div>' + (detail ? '<div class="d">'+esc(detail)+'</div>' : '');
+  box.appendChild(el);
+  while(box.children.length>5){ box.removeChild(box.firstChild); }
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.classList.add('show'); }); });
+  var t = setTimeout(function(){ dismiss(el); }, (kind==='err')?6000:4000);
+  el.addEventListener('click', function(){ clearTimeout(t); dismiss(el); });
+}
+function dismiss(el){
+  el.classList.remove('show');
+  setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 320);
+}
+
+/* ---------- 弹窗（自绘，不用原生 confirm：WebView2 里原生框会冻住整页） ---------- */
+function openModal(title, bodyHTML, footHTML){
+  $('modalTitle').textContent = title;
+  $('modalBody').innerHTML = bodyHTML;
+  $('modalFoot').innerHTML = footHTML || '<button type="button" onclick="closeModal()">关闭</button>';
+  $('modalMask').classList.add('show');
+}
+function closeModal(){ $('modalMask').classList.remove('show'); }
+function onMaskClick(e){ if(e && e.target === $('modalMask')) closeModal(); }
+
+/* ---------- 交叉核对：项目级 AK 是否已挂进 CPA 的「秒悟」条目 ----------
+   这里调的是宿主自己的配置接口，不是本插件的路由：读不到就只显示「未知」，
+   绝不影响主流程（读数、卡片、按钮全部照常）。面板只拿得到尾号，所以按尾号匹配。 */
+function cpaGroupsOf(payload){
+  if(!payload) return null;
+  if(Object.prototype.toString.call(payload) === '[object Array]') return payload;
+  if(Object.prototype.toString.call(payload['openai-compatibility']) === '[object Array]') return payload['openai-compatibility'];
+  if(Object.prototype.toString.call(payload['api-keys']) === '[object Array]') return payload['api-keys'];
+  return null;
+}
+function cpaKeysOf(group){
+  var out = [];
+  if(!group) return out;
+  var list = group.keys || group['api-key-entries'] || [];
+  for(var i=0;i<list.length;i++){
+    var entry = list[i] || {};
+    var k = entry['api-key'] || entry.apiKey || entry.key;
+    if(k) out.push(String(k));
+  }
+  var own = group['api-key'];
+  if(own) out.push(String(own));
+  return out;
+}
+function isCpaEntryGroup(group){
+  if(!group) return false;
+  var name = String(group.name==null?'':group.name).trim();
+  if(name && name === CPA_ENTRY_NAME) return true;
+  var base = String(group['base-url']||group.baseUrl||'');
+  return base.indexOf('meoo') >= 0;
+}
+function loadCpaKeys(){
+  if(CPA.checked) return Promise.resolve(CPA);
+  /* api() already prepends DOOR + "/management"; this path is the host's own config
+     tree, NOT this plugin's base (BASE = /plugins/hkdf-meoo), so it must not carry BASE.
+     2026.11.21.8: the host mounts the openai-compatibility config tree on the /v8
+     door (GET /v8/management/config/api-keys/openai-compatibility); the /v0 door
+     answers 404 — measured. The old single-door call therefore 404'd forever and
+     the catch branch marked every account 未知/待核对. Try /v8 first (the host
+     keeps /v0 and /v8 alive at once), then fall back to the current door. */
+  function tryDoor(door){
+    return fetch(door + '/management/config/api-keys/openai-compatibility', {
+      credentials: 'omit',
+      headers: authHeaders(getKey())
+    }).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  var k = getKey();
+  if(!k){ CPA.state = 'unknown'; CPA.checked = true; return Promise.resolve(CPA); }
+  return tryDoor('/v8')
+    .catch(function(){ return tryDoor('/v0'); })
+    .catch(function(){ return tryDoor(DOOR); })
+    .then(function(payload){
+      var groups = cpaGroupsOf(payload);
+      if(!groups){ CPA.state = 'unknown'; CPA.checked = true; return CPA; }
+      var keys = [], found = false;
+      for(var i=0;i<groups.length;i++){
+        if(!isCpaEntryGroup(groups[i])) continue;
+        found = true;
+        keys = keys.concat(cpaKeysOf(groups[i]));
+      }
+      CPA.state = found ? 'ok' : 'unknown';
+      CPA.keys = keys;
+      CPA.checked = true;
+      return CPA;
+    }).catch(function(){
+      /* 宿主路径变了、权限不足、版本漂移：只降级成「未知」，不动主流程。 */
+      CPA.state = 'unknown';
+      CPA.checked = true;
+      return CPA;
+    });
+}
+function cpaVerdict(a){
+  if(CPA.state !== 'ok') return 'unknown';
+  var tail = String(a.project_ak_tail||'');
+  if(!tail) return 'out';
+  for(var i=0;i<CPA.keys.length;i++){
+    var k = String(CPA.keys[i]||'');
+    if(k.length>=tail.length && k.slice(k.length-tail.length) === tail) return 'in';
+  }
+  return 'out';
+}
+function cpaBadge(v){
+  if(v==='in') return '<span class="cd-badge ok" title="该项目级 AK 的尾号出现在 CPA 的「'+esc(CPA_ENTRY_NAME)+'」条目里（面板只拿得到尾号，按尾号匹配）">已在 CPA</span>';
+  if(v==='out') return '<span class="cd-badge no" title="尾号没有出现在 CPA 的「'+esc(CPA_ENTRY_NAME)+'」条目里 —— 要么还没挂进去，要么被换掉了">未挂进 CPA</span>';
+  return '<span class="cd-badge unknown" title="没读到 CPA 的配置接口（宿主路径变了或权限不足），所以只能显示未知；这不影响上面的读数">未知</span>';
+}
+
+/* ---------- 汇总 / 卡片 ---------- */
+function aggOf(list){
+  var a = {n:0, readable:0, dead:0, stale:0, inCpa:0, outCpa:0, unknownCpa:0};
+  (list||[]).forEach(function(x){
+    a.n++;
+    if(x.outcome==='dead') a.dead++;
+    if(x.stale) a.stale++;
+    if(x.readable) a.readable++;
+    var v = cpaVerdict(x);
+    if(v==='in') a.inCpa++; else if(v==='out') a.outCpa++; else a.unknownCpa++;
+  });
+  return a;
+}
+function matches(a, f){
+  if(f==='readable') return !!a.readable;
+  if(f==='in') return cpaVerdict(a)==='in';
+  if(f==='out') return cpaVerdict(a)==='out';
+  if(f==='stale') return !!a.stale;
+  if(f==='dead') return a.outcome==='dead';
+  return true;
+}
+function scoped(){
+  var rows = (lastPayload && lastPayload.accounts) || [];
+  return rows.filter(function(a){ return matches(a, currentFilter); });
+}
+var FILTER_LABEL = {all:'全部账号', readable:'可读账号', in:'已在 CPA 的账号', out:'未挂进 CPA 的账号', stale:'读数过期的账号', dead:'失效账号'};
+
+function renderSummary(){
+  var box = $('summaryBox');
+  var rows = (lastPayload && lastPayload.accounts) || [];
+  var s = (lastPayload && lastPayload.summary) || {};
+  if(!rows.length){ box.style.display='none'; box.innerHTML=''; return; }
+  var sc = scoped();
+  var g = aggOf(rows);
+  /* 数字一律 .num 等宽（workbuddy §6）：轮询刷新时宽度不跳。 */
+  var meta = sc.length + ' / ' + g.n + ' 个账号 · 有数据 <span class="num">'+g.readable+'</span> · 失效 <span class="num">'+g.dead+'</span>'
+    + ' · 读数过期 <span class="num">'+g.stale+'</span> · 已在 CPA <span class="num">'+g.inCpa+'</span> · 未挂进 <span class="num">'+g.outCpa+'</span> · 待核对 <span class="num">'+g.unknownCpa+'</span>';
+  /* 今日口径大条（workbuddy 2026-10-22.4 主人原话同构）：今日已用 ÷ 今日总量，
+     今日总量 = 今日结算剩余 + 今日已用，基线每天 0 点重置。累计口径退到悬停当对照。
+     覆盖不全（TodayValid < 有数据号数）时明说，未知不按 0 计。 */
+  var tu = s.today_used, tr = s.today_remain, tt = s.today_total, tg = s.today_gain;
+  var covered = s.today_valid||0;
+  var cover = (covered < g.readable) ? '（今日已用只覆盖 <span class="num">'+covered+'/'+g.readable+'</span> 个号；其余今天还没有可比基线）' : '';
+  var pct = (tt!=null && tt>0 && tu!=null) ? Math.max(0, Math.min(100, tu/tt*100)) : null;
+  /* 条画「手里还剩」：剩余段锚定左端、宽度=剩余占比，从右端向左缩（loomy/workbuddy 同方向）。 */
+  var barColorToday = 'var(--ok)'; if(pct!=null){ if(pct>80) barColorToday='var(--err)'; else if(pct>50) barColorToday='var(--warn)'; }
+  var notes = (s.notes||[]).map(function(n){ return '<div class="pb-meta pb-warn">'+esc(n)+'</div>'; }).join('');
+  var cumTitle = '累计口径对照（不画成进度条）：总可用 '+fmtNum(s.total_available)+' · 总已耗 '+fmtNum(s.total_consumed)+' · 总量 '+fmtNum(s.total_granted)
+    + (s.total_expired!=null ? (' · 已过期 '+fmtNum(s.total_expired)) : '')
+    + '\n\n今日口径：今日总量 = 今日结算剩余 + 今日已用；基线 = 每个号今天第一次读到的 consumed/available，0 点重置。'
+    + '\n今日已用 = 每号（最近一次 consumed − 今天第一次读到的 consumed）相加。'
+    + (s.today_gain!=null ? ('\n今日获取 +'+fmtNum(s.today_gain)+' = 今天有进账的号（此刻余额比日初基线多出的量）相加。') : '')
+    + '\n缓存时间 '+(s.last_attempt_at||'—')+' · 服务器时间 '+textOr(lastPayload.server_time)
+    + ' · 刷新窗口 '+(s.refresh_minutes==null?'—':s.refresh_minutes)+' 分钟 · 本次'+(s.served_from_cache?'读的是缓存':'已走上游')
+    + (lastPayload.cache_path ? ('\n缓存文件 '+lastPayload.cache_path) : '');
+  var todayLine;
+  if(tu==null || tt==null){
+    todayLine = '<div class="pb-meta">今日结算剩余 <span class="num">'+fmtNum(tr)+'</span> · 今日已用 未知（今天还没有任何号建立可比基线；打开面板或点「刷新数据」后就有） <span style="color:var(--mut)">· 未知不按 0 计</span></div>';
+  } else {
+    todayLine = '<div class="pb-meta">今日结算剩余 <span class="num">'+fmtNum(tr)+'</span> · 今日已用 <span class="num">'+fmtNum(tu)+'</span> · 今日总量 <span class="num">'+fmtNum(tt)+'</span>'
+      + (tg!=null ? (' · <span style="color:var(--ok);font-weight:600">今日获取 <span class="num">+'+fmtNum(tg)+'</span></span>') : '')
+      + cover + ' <span style="color:var(--mut)">（悬停看算法与累计对照）</span></div>';
+  }
+  box.style.display = 'block';
+  box.innerHTML =
+      '<div class="summary-hd">'
+    +   '<div class="summary-title">用量汇总 · '+esc(FILTER_LABEL[currentFilter]||'全部账号')+'</div>'
+    +   '<div class="summary-meta">'+meta+'</div>'
+    + '</div>'
+    + '<div class="pb" title="'+esc(cumTitle)+'">'
+    +   '<div class="pb-label"><span>今日已用 / 今日总量</span><span>'+(pct==null?'今日已用 未知':('手里还剩 <span class="num">'+fmtPct(100-pct)+'</span>'))+'</span></div>'
+    +   '<div class="pb-track"><div class="pb-bar" style="width:'+(pct==null?0:(100-pct)).toFixed(1)+'%;background:'+(pct==null?'var(--surface-muted)':barColorToday)+'"></div></div>'
+    +   todayLine
+    + '</div>'
+    + notes;
+}
+
+function rowName(a){
+  var label = String((a && a.label)||'').trim();
+  if(label) return label;
+  var ident = String((a && a.identity_name)||'').trim();
+  if(ident) return ident;
+  return '（未命名 '+esc((a && a.id)||'')+'）';
+}
+
+function card(a){
+  var dead = a.outcome==='dead';
+  var stale = !!a.stale;
+  var pill = dead ? '<span class="cd-pill dead">失效</span>'
+           : stale ? '<span class="cd-pill stale">读数过期</span>'
+           : a.readable ? '<span class="cd-pill ok">在读</span>'
+           : '<span class="cd-pill">未读到</span>';
+  var ident = String(a.identity_name||'').trim();
+  var label = String(a.label||'').trim();
+  var identBadge = (ident && label && ident!==label) ? '<span class="cd-badge unknown" title="秒悟账号上的身份名">'+esc(ident)+'</span>' : '';
+  var plan = String(a.plan_name||'').trim() || String(a.plan_code||'').trim();
+  var used = (a.consumed==null) ? null : num0(a.consumed);
+  var total = (a.granted==null) ? null : num0(a.granted);
+  var pct = (used!=null && total!=null && total>0) ? Math.max(0, Math.min(100, used/total*100)) : null;
+  /* 读不到读数时不画"满格灰条"：灰条会被读成"已经用光"。只留空轨道。
+     段序与 loomy 面板一致：先画「剩下的」（绿色、贴左），再画「用掉的」（灰、挂右端）。
+     以前 used 段在前，绿条从左往右长，看上去像积分从左边被吃掉；loomy 是从右边吃。 */
+  var remain = (used==null || total==null) ? null : Math.max(0, total-used);
+  var bar = '<div class="cd-bar">'
+    + (pct==null ? '' :
+        ((remain>0 ? '<span class="cd-seg" style="flex:'+remain.toFixed(2)+' 1 0"></span>' : '')
+       + (used>0 ? '<span class="cd-seg used" style="flex:'+used.toFixed(2)+' 1 0"></span>' : '')))
+    + '</div>';
+  var akState = String(a.project_ak_state||'');
+  var akTail = esc(String(a.project_ak_tail||'').trim());
+  var akText = akTail ? ('尾号 '+akTail) : '（没有）';
+  if(akTail && akState && akState!=='ok') akText = '尾号 '+akTail+'（'+esc(akState)+'）';
+  var note = a.note ? '<div class="cd-msg'+((dead||stale)?' err':'')+'" title="'+esc(a.note)+'">'+esc(a.note)+'</div>' : '';
+  /* 每日登录赠送积分（2,000/天）：状态来自后端，每行都带 —— 没领到也要看得见。 */
+  var dl = a.daily_login || {};
+  var dlOutcome = String(dl.outcome||'');
+  var dlPill = dlOutcome==='granted' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已领取'))+'">今日 +'+fmtNum(dl.granted_amount||2000)+'</span>'
+            : dlOutcome==='already' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已到账'))+'">今日已领</span>'
+            : dlOutcome==='needs_login' ? '<span class="cd-pill dead" title="'+esc(String(dl.note||'需要人工登录'))+'">待登录</span>'
+            : dlOutcome==='failed' ? '<span class="cd-pill stale" title="'+esc(String(dl.note||'本次未领取到'))+'">今日未领</span>'
+            : '<span class="cd-pill" title="插件会在每天零点后自动尝试领取">未尝试</span>';
+  /* 会话寿命（每 30 天一次的人工登录）：到期前 7 天内变黄色，过期变红色。
+     这是「到期前提醒」—— 会话悄悄死掉 = 一天的积分悄悄丢掉。 */
+  var ses = a.web_session || {};
+  var sesDays = Number(ses.days_left);
+  var sesPill = !ses.found ? '<span class="cd-pill dead" title="没有找到该账号的登录会话">无会话</span>'
+            : sesDays < 0 ? '<span class="cd-pill dead" title="会话已于 '+esc(ses.expires_at)+' 过期，重新登录即可续上">会话过期</span>'
+            : sesDays < 7 ? '<span class="cd-pill stale" title="'+esc(ses.hint||'')+'">剩 '+sesDays+' 天</span>'
+            : '<span class="cd-pill" title="'+esc(ses.hint||'')+'">会话 '+sesDays+' 天</span>';
+  var dlNote = dl.note ? '<div class="cd-msg'+(dlOutcome==='failed'||dlOutcome==='needs_login'?' err':'')+'" title="'+esc(dl.note)+'">'+esc(dl.note)+'</div>' : '';
+  /* 账号名（结构照 workbuddy）：label 优先、身份名兜底；identity 徽章只在两者不同且都有值时出现。 */
+  var name = rowName(a);
+
+  return '<div class="cd-card'+(dead?' cd-dead':'')+'" data-in-cpa="'+esc(cpaVerdict(a))+'" data-state="'+(dead?'dead':(stale?'stale':'ok'))+'" data-id="'+esc(a.id)+'">'
+    + '<div class="cd-row1">'
+    +   '<div class="cd-name-group">'
+    +     '<span class="cd-name" title="'+esc(name)+'">'+esc(name)+'</span>'
+    +     cpaBadge(cpaVerdict(a))
+    +     identBadge
+    +   '</div>'
+    +   '<div class="cd-ops">'+pill+dlPill+sesPill+'</div>'
+    + '</div>'
+    + '<div class="cd-status">'
+    +   '<span class="cd-lbl">套餐</span>'
+    +   '<span class="cd-val">'+esc(textOr(plan))+'</span>'
+    +   '<div class="cd-utils">'
+    +     '<button type="button" class="cd-icon-btn" data-action="claim" data-id="'+esc(a.id)+'" title="立即为这个账号尝试领取每日登录赠送积分（2,000 分）。用的是本机浏览器里已有的登录态，不存密码、不填短信。" aria-label="领每日积分：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M1.5 6.5h13"/></svg>'
+    +     '</button>'
+    +     '<button type="button" class="cd-icon-btn" data-action="login" data-id="'+esc(a.id)+'" title="打开这个账号专用的 Edge 登录窗（停在 meoo.com）。在窗口里登录一次，会话落在专用目录里，插件就能自动领积分。会话每 30 天过期一次，过期前点这个按钮重新登录即可。" aria-label="登录：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C4.4 1.5 1.5 4.4 1.5 8s2.9 6.5 6.5 6.5 6.5-2.9 6.5-6.5S11.6 1.5 8 1.5z"/><path d="M1.5 8h13"/><path d="M8 1.5c1.8 1.7 2.8 4 2.8 6.5s-1 4.8-2.8 6.5c-1.8-1.7-2.8-4-2.8-6.5s1-4.8 2.8-6.5z"/></svg>'
+    +     '</button>'
+    +     '<button type="button" class="cd-icon-btn" data-action="cookie" data-id="'+esc(a.id)+'" title="浏览器里的会话读不到时（浏览器开着会锁住 cookie 文件），可以在这里粘一段 meoo.com 的 Cookie。保存前会核对它是不是这个账号的会话。" aria-label="粘会话：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-5.5-5.5"/><path d="M11 3.5h.01"/><path d="M13.5 6h.01"/><path d="M10.5 8.5h.01"/><path d="M12.5 11h.01"/></svg>'
+    +     '</button>'
+    +     '<button type="button" class="cd-icon-btn danger" data-action="remove" data-id="'+esc(a.id)+'" title="只从本插件的账号文件里删掉这一行；CPA 配置与秒悟账号本身都不动。" aria-label="移除账号：'+esc(name)+'">'
+    +       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11"/><path d="M6.5 4V2.5h3V4"/><path d="M4 4l.7 9.5h6.6L12 4"/><path d="M6.7 6.8v4.4"/><path d="M9.3 6.8v4.4"/></svg>'
+    +     '</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="cd-meta">'
+    +   '<div class="cd-mi"><span class="cd-lbl">读数</span><span class="cd-val'+(stale?' warn':'')+'">'+esc(fmtAge(a.age_seconds))+'</span></div>'
+    +   '<div class="cd-mi right"><span class="cd-lbl">累计已耗 / 总量</span><span class="cd-val">'+fmtNum(a.consumed)+' / '+fmtNum(a.granted)+'</span></div>'
+    + '</div>'
+    + '<div class="cd-credit-line">'
+    +   '<span class="cd-credit"><span class="cd-lbl">剩余</span><b class="num">'+fmtNum(a.available)+'</b></span>'
+    +   '<span class="cd-credit dim" title="今日已用 = 该号最近一次 consumed − 今天第一次读到的 consumed（日初基线，0 点重置）。未知 = 今天还没有可比基线，不按 0 计。">'
+    +     '今日已用 '+(a.today_used==null ? '未知' : '<span class="num">'+fmtNum(a.today_used)+'</span>')
+    +     ((a.today_gain!=null) ? ' · <span class="cd-gain">今日获取 <span class="num">+'+fmtNum(a.today_gain)+'</span></span>' : '')
+    +     ((a.expired!=null && num0(a.expired)>0) ? ' · <span title="上游已发放但已过期的积分（不在可用、已耗里），从总量里扣除后才是真正能用的">已过期 '+fmtNum(a.expired)+'</span>' : '')
+    +   '</span>'
+    + '</div>'
+    + bar
+    + '<div class="cd-meta" style="margin-top:8px">'
+    +   '<div class="cd-mi"><span class="cd-lbl">项目</span><span class="cd-val" title="'+esc(textOr(a.project_name))+'">'+esc(textOr(a.project_name))+'</span></div>'
+    +   '<div class="cd-mi right"><span class="cd-lbl">url_id</span><span class="cd-val">'+esc(textOr(a.project_url_id))+'</span></div>'
+    + '</div>'
+    + '<div class="cd-meta">'
+    +   '<div class="cd-mi"><span class="cd-lbl">项目级 AK</span><span class="cd-val">'+akText+'</span></div>'
+    +   '<div class="cd-mi right"><span class="cd-lbl">key 尾号</span><span class="cd-val">'+esc(textOr(a.key_tail))+'</span></div>'
+    + '</div>'
+    + dlNote
+    + note
+    + '</div>';
+}
+
+/* 账号卡事件委托（照 workbuddy 的 data-action 模式）：四个账号级工具钮
+   一律走 .cd-card 上的 data-id，不再在模板里内联 onclick 闭包。 */
+document.addEventListener('click', function(ev){
+  var t = ev.target && ev.target.closest ? ev.target.closest('.cd-icon-btn[data-action]') : null;
+  if(!t) return;
+  var action = t.getAttribute('data-action');
+  if(action === 'claim') claimOne(t);
+  else if(action === 'login') openLoginWindow(t);
+  else if(action === 'cookie') askPasteSession(t);
+  else if(action === 'remove') askRemove(t);
+});
+
+function renderGrid(){
+  var rows = scoped();
+  $('grid').innerHTML = rows.length
+    ? rows.map(card).join('')
+    : '<div class="card loading" style="padding:28px">当前筛选下没有账号。</div>';
+}
+
+function renderCounts(){
+  var rows = (lastPayload && lastPayload.accounts) || [];
+  var g = aggOf(rows);
+  $('cntAll').textContent = g.n;
+  $('cntReadable').textContent = g.readable;
+  $('cntIn').textContent = g.inCpa;
+  $('cntOut').textContent = g.outCpa;
+  $('cntStale').textContent = g.stale;
+  $('cntDead').textContent = g.dead;
+}
+
+function render(d){
+  lastPayload = d;
+  var s = d.summary || {};
+  $('svtime').textContent = s.served_from_cache ? '本次读缓存' : '本次已走上游';
+  $('metaHint').textContent = 'v'+(s.version||'')+' · 刷新窗口 '+(s.refresh_minutes==null?'?':s.refresh_minutes)+' 分钟 · 缓存时间 '+fmtStamp(s.last_attempt_at);
+  renderCounts();
+  renderSummary();
+  renderGrid();
+  $('autoPoll').checked = pollTimer !== null;
+}
+
+/* ---------- 过滤 ---------- */
+function filterList(key, btn){
+  currentFilter = key;
+  var tags = document.querySelectorAll('.ftag');
+  for(var i=0;i<tags.length;i++){ tags[i].classList.remove('active'); }
+  if(btn) btn.classList.add('active');
+  if(lastPayload){ renderSummary(); renderGrid(); }
+}
+
+/* ---------- 读取 ---------- */
+function busy(btn, on, label){
+  if(!btn) return;
+  btn.disabled = !!on;
+  btn.innerHTML = on ? ('<span class="spin"></span>'+(label||'刷新中…')) : (label||'刷新数据');
+}
+
+function load(force, btn){
+  if(!getKey()){ showAuth(); return Promise.resolve(); }
+  var url = force ? (BASE + '/refresh') : (BASE + '/accounts');
+  var opts = force ? {method:'POST'} : {};
+  if(force) busy(btn, true, '刷新中…');
+  return api(url, opts).then(function(d){
+    render(d);
+    if(force){
+      var r = ((d.summary||{}).refreshed_count)||0;
+      toast('已刷新 '+r+' 个账号', 'ok', '积分查询不扣分');
+    }
+    /* 交叉核对是附加值：先画完卡片，再去问 CPA 的配置接口。 */
+    return loadCpaKeys().then(function(){ renderCounts(); renderSummary(); renderGrid(); });
+  }).catch(function(e){
+    if(force){ toast('刷新失败', 'err', e.message); }
+    if(!lastPayload){
+      $('grid').innerHTML = '<div class="card loading" style="padding:28px">'+esc(e.message)+'</div>';
+    }
+  }).then(function(){
+    if(force) busy(btn, false, '刷新数据');
+  });
+}
+
+/* ---------- 每日登录赠送积分 ---------- */
+/* 立即为某账号（或全部账号）尝试领取每日 2,000 分。
+   用的是本机浏览器里已有的登录态：插件不上传密码、不填短信、不建账号。
+   判据由后端定：账本上出现新的一笔「登录赠送积分」才算领到。 */
+function claimOne(btn){
+  if(!getKey()){ showAuth(); return; }
+  var id = btn && btn.getAttribute('data-id');
+  var was = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spin"></span>领取中…'; }
+  var url = BASE + '/daily-login' + (id ? '?account_id=' + encodeURIComponent(id) : '');
+  return api(url, {method:'POST'}).then(function(d){
+    var dl = (d && d.daily_login) || {};
+    if(d && d.error){ toast('领取失败', 'err', d.error); }
+    else if(dl.granted){ toast('已领取 '+dl.granted+' 个账号的每日积分', 'ok', '共尝试 '+dl.attempted+' 次'); }
+    else if(dl.already && !dl.granted){ toast('今日已领过', 'ok', '没有重复领取'); }
+    else if(dl.needs_login){ toast('需要人工登录', 'err', '请在浏览器登录 meoo.com 后重试'); }
+    else { toast('本次未领到', 'err', '尝试 '+dl.attempted+' 次，失败 '+dl.failed+' 次'); }
+    return load(false, null);
+  }).catch(function(e){
+    toast('领取失败', 'err', e.message);
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.innerHTML = was; }
+  });
+}
+
+function claimAll(btn){
+  if(!getKey()){ showAuth(); return; }
+  var was = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spin"></span>领取中…'; }
+  return api(BASE + '/daily-login', {method:'POST'}).then(function(d){
+    var dl = (d && d.daily_login) || {};
+    if(d && d.error){ toast('领取失败', 'err', d.error); }
+    else if(dl.granted){ toast('已领取 '+dl.granted+' 个账号的每日积分', 'ok', '共尝试 '+dl.attempted+' 次'); }
+    else if(dl.needs_login){ toast('部分账号需要人工登录', 'err', '请在浏览器登录 meoo.com 后重试'); }
+    else if(dl.already){ toast('今日已领过', 'ok', '没有重复领取'); }
+    else { toast('本次未领到', 'err', '尝试 '+dl.attempted+' 次，失败 '+dl.failed+' 次'); }
+    return load(false, null);
+  }).catch(function(e){
+    toast('领取失败', 'err', e.message);
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.innerHTML = was; }
+  });
+}
+
+/* ---------- 打开登录窗（每 30 天一次的人工登录）---------- */
+/* 秒悟的发放只认网页会话，会话 30 天过期且不能自动续。
+   这个按钮打开该账号专用的 Edge 登录窗：在窗口里登录一次，会话落进专用目录，
+   插件立刻就能自动领积分。之后每次过期前，面板会提前 7 天把胶囊变黄提醒。 */
+function openLoginWindow(btn){
+  if(!getKey()){ showAuth(); return; }
+  var id = btn && btn.getAttribute('data-id');
+  if(!id){ toast('缺少账号 id', 'err', ''); return; }
+  var was = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '打开中…'; }
+  return api(BASE + '/daily-login/login-window', {method:'POST', body: JSON.stringify({account_id:id})}).then(function(d){
+    if(d && d.error){ toast('打不开登录窗', 'err', d.error); return; }
+    var lw = (d && d.login_window) || {};
+    toast('登录窗已打开', 'ok', lw.hint || '在窗口里登录 meoo.com，登录成功后回来点「领每日积分」');
+  }).catch(function(e){
+    toast('打不开登录窗', 'err', e.message);
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.innerHTML = was; }
+  });
+}
+
+/* ---------- 粘会话（浏览器读不到时的退路）---------- */
+/* 浏览器开着的时候，Chromium 会锁住自己的 cookie 文件，插件就读不到那个会话。
+   这时可以让操作者自己从 DevTools 复制一段 Cookie 粘过来。
+   后端会先核对「这段会话是不是这个账号的」，不是就拒绝保存。 */
+function askPasteSession(btn){
+  var id = btn && btn.getAttribute('data-id');
+  if(!id){ toast('缺少账号 id', 'err', ''); return; }
+  var label = (lastPayload && (lastPayload.accounts||[]).filter(function(a){return a.id===id;})[0]||{}).label || id;
+  var body = '<div class="hint">给账号 <b>'+esc(label)+'</b> 粘一段 meoo.com 的 Cookie。<br>'
+    + '浏览器登录 meoo.com 后，按 F12 → Application → Cookies → meoo.com，把整段 Cookie（或至少 '
+    + '<code>oneday_sid</code>、<code>login_oneday_ticket</code> 及其 <code>.sig</code>）复制过来。<br>'
+    + '只存本机，插件不发送、不外传；保存前会核对这段会话确实属于这个账号。</div>'
+    + '<input id="sessionCookieInput" type="password" class="field-input" placeholder="Cookie" autocomplete="off" style="width:100%">';
+  openModal('粘会话 Cookie', body, '<button type="button" class="sec" onclick="closeModal()">取消</button><button type="button" onclick="saveSessionCookie(this,\''+esc(id)+'\')">保存</button>');
+}
+
+function saveSessionCookie(btn, id){
+  var input = $('sessionCookieInput');
+  var cookie = input ? String(input.value||'').trim() : '';
+  if(!cookie){ toast('没有内容', 'err', '请先粘贴 Cookie'); return; }
+  btn.disabled = true;
+  return api(BASE + '/daily-login/session', {method:'POST', body: JSON.stringify({account_id:id, cookie:cookie})}).then(function(d){
+    if(d && d.error){ toast('保存失败', 'err', d.error); return; }
+    toast('会话已保存', 'ok', '现在可以点「领每日积分」');
+    closeModal();
+    return load(false, null);
+  }).catch(function(e){
+    toast('保存失败', 'err', e.message);
+  }).then(function(){
+    btn.disabled = false;
+  });
+}
+
+/* ---------- 模型选用（照 workbuddy「模型选用」形态移植） ----------
+   目录：本插件 GET /models（网关目录，带 usable 标记）；
+   已启用集合：宿主 GET /openai-compatibility「秒悟」条目的 models 别名清单。
+   保存：宿主 PATCH /openai-compatibility {name:"秒悟", value:{models:[完整定义]}} ——
+   未勾选的模型从注册列表移除，勾选的原样保留；keys 等其它字段不在 value 里 = 不动。
+   宿主落盘热重载，数秒内生效。这是宿主配置的**全量覆盖 models 列表**，所以保存前二次确认。 */
+var MCP = { loaded:false, dirty:false, models:[], enabled:null, note:"" };
+function hostApi(path, opts){
+  opts = opts || {};
+  var k = getKey();
+  if(!k){ showAuth(); return Promise.reject(new Error('需要管理密钥')); }
+  return fetch(API + path, {
+    method: opts.method || 'GET',
+    credentials: 'omit',
+    body: opts.body,
+    headers: Object.assign({'Content-Type':'application/json'}, authHeaders(k), opts.headers||{})
+  }).then(function(r){
+    if(r.status===401 || r.status===403){
+      try{ sessionStorage.removeItem(SS_KEY); }catch(e){}
+      showAuth();
+      throw new Error('管理密钥无效或缺失');
+    }
+    return r.json().catch(function(){ return {}; });
+  });
+}
+function hostCompatEntry(payload){
+  var groups = null;
+  if(!payload) return null;
+  if(Object.prototype.toString.call(payload) === '[object Array]') groups = payload;
+  else if(Object.prototype.toString.call(payload['openai-compatibility']) === '[object Array]') groups = payload['openai-compatibility'];
+  if(!groups) return null;
+  for(var i=0;i<groups.length;i++){
+    var g = groups[i] || {};
+    if(String(g.name||'').trim() === CPA_ENTRY_NAME) return g;
+    var base = String(g['base-url']||g.baseUrl||'');
+    if(!String(g.name||'').trim() && base.indexOf('meoo') >= 0) return g;
+  }
+  return null;
+}
+function mcEnabledAliases(entry){
+  var out = {};
+  var list = (entry && entry.models) || [];
+  for(var i=0;i<list.length;i++){
+    var m = list[i] || {};
+    if(m.alias) out[String(m.alias)] = true;
+    else if(m.name) out[String(m.name)] = true;
+  }
+  return out;
+}
+function openModels(btn){
+  openModal('模型选用', '<div class="hint">读取中…</div>');
+  Promise.all([api(BASE + '/models'), hostApi('/openai-compatibility')]).then(function(rs){
+    var d = rs[0] || {};
+    var entry = hostCompatEntry(rs[1]);
+    MCP.models = (d.models || []);
+    MCP.enabled = entry ? mcEnabledAliases(entry) : null;
+    MCP.note = String(d.note||'');
+    MCP._default = d.default_model;
+    /* 完整模型定义（PATCH 全量覆盖时原样回传用）：从宿主条目直接取。 */
+    MCP._defs = {};
+    if(entry && entry.models){
+      for(var i=0;i<entry.models.length;i++){
+        var m = entry.models[i] || {};
+        if(m.alias) MCP._defs[String(m.alias)] = m;
+      }
+    }
+    MCP.dirty = false;
+    renderModelPicker();
+  }).catch(function(e){
+    openModal('模型选用', '<div class="hint pb-warn">读取失败：'+esc(e.message)+'</div>');
+  });
+}
+function mcCount(){
+  var on = 0, total = MCP.models.length;
+  for(var i=0;i<total;i++){
+    var m = MCP.models[i] || {};
+    var gid = 'meoo-' + String(m.name||'');
+    if(MCP.enabled && MCP.enabled[gid]) on++;
+  }
+  return {on:on, total:total};
+}
+function renderModelPicker(){
+  var head = '<div class="hint">目录来自模型网关（项目级 AK）；勾选 = 启用（注册进 CPA「'+esc(CPA_ENTRY_NAME)+'」条目），取消勾选点「保存选用」写回宿主 config.yaml，热加载数秒内生效。标成不可用的模型不建议启用。</div>';
+  if(!MCP.models.length){
+    openModal('模型选用', head + '<div class="hint">'+(MCP.note ? esc(MCP.note) : '先在动作条上点「刷新数据」走一次发现链，拿到项目级 AK。')+'</div>');
+    return;
+  }
+  var c = mcCount();
+  var html = head
+    + (MCP.note ? '<div class="hint pb-warn">'+esc(MCP.note)+'</div>' : '')
+    + '<div class="mc-bar"><button type="button" class="sec" onclick="mcRefresh(this)">刷新目录</button>'
+    + '<button type="button" onclick="mcSave(this)">保存选用</button>'
+    + '<span class="mc-note" id="mcNote">已启用 '+c.on+' / 共 '+c.total+(MCP.enabled===null?' · 宿主条目读取失败，勾选不可保存':'')+(MCP.dirty?' · 有未保存改动':'')+'</span></div>'
+    + '<div class="grid mc-grid">';
+  MCP.models.forEach(function(m, idx){
+    var gid = 'meoo-' + String(m.name||'');
+    var checked = !!(MCP.enabled && MCP.enabled[gid]);
+    var unusable = !m.usable;
+    html += '<div class="cd-card mc-card'+(checked?'':' mc-off')+'" data-idx="'+idx+'">'
+      + '<div class="cd-row1"><div class="cd-name-group">'
+      + '<span class="mc-id" title="网关模型名：'+esc(m.name||'')+'">'+esc(m.display_name||m.name)+'</span>'
+      + (unusable ? '<span class="cd-pill dead" title="'+esc(m.note||'')+'">不可用</span>' : '')
+      + '</div><div class="cd-ops"><label class="mc-item" title="'+(checked?'已注册进 CPA；取消勾选后点「保存选用」写回':'勾选 = 注册进 CPA「'+esc(CPA_ENTRY_NAME)+'」条目')+'">'
+      + '<input type="checkbox" data-mc="'+idx+'"'+(checked?' checked':'')+'> 启用</label></div></div>'
+      + '<div class="cd-meta"><div class="cd-mi"><span class="cd-lbl">网关 id</span><span class="cd-val">'+esc(m.name||'—')+'</span></div>'
+      + '<div class="cd-mi right"><span class="cd-lbl">注册别名</span><span class="cd-val">'+esc(gid)+'</span></div></div>'
+      + '</div>';
+  });
+  html += '</div>'
+    + '<div class="hint">默认模型 '+esc(textOr(MCP._default))+'</div>';
+  openModal('模型选用', html);
+  var box = document.querySelector('.mc-grid');
+  if(box){
+    box.addEventListener('change', function(ev){
+      var t = ev.target;
+      if(!t || !t.getAttribute || t.getAttribute('data-mc')===null) return;
+      MCP.dirty = true;
+      var card = t.closest ? t.closest('.mc-card') : null;
+      if(card) card.classList.toggle('mc-off', !t.checked);
+      var c2 = mcCountLive();
+      var note = $('mcNote');
+      if(note) note.textContent = '已启用 '+c2.on+' / 共 '+c2.total+' · 有未保存改动，点「保存选用」写回';
+    });
+  }
+}
+/* 勾选实时计数：从 DOM 读真值，不依赖渲染时的快照。 */
+function mcCountLive(){
+  var on = 0, total = 0;
+  var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+  for(var i=0;i<boxes.length;i++){ total++; if(boxes[i].checked) on++; }
+  return {on:on, total:total};
+}
+function mcRefresh(btn){
+  busy(btn, true, '刷新中…');
+  api(BASE + '/models/refresh', {method:'POST'}).then(function(d){
+    if(d && d.error){ toast('刷新失败', 'err', d.error); return; }
+    MCP.models = (d.models || []);
+    MCP.note = String((d && d.note)||'');
+    /* 保留当前勾选态：刷新目录只更新候选清单，不重置已选集合。 */
+    var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+    var live = {};
+    for(var i=0;i<boxes.length;i++){
+      var idx = boxes[i].getAttribute('data-mc');
+      var m = MCP.models[idx];
+      if(m) live['meoo-' + String(m.name||'')] = boxes[i].checked;
+    }
+    MCP.enabled = live;
+    renderModelPicker();
+    toast('模型目录已刷新', 'ok', MCP.models.length + ' 个模型');
+  }).catch(function(e){ toast('刷新失败', 'err', e.message); })
+  .then(function(){ busy(btn, false, '刷新目录'); });
+}
+function mcSave(btn){
+  if(MCP.enabled === null){ toast('无法保存', 'err', '宿主「'+CPA_ENTRY_NAME+'」条目读取失败，不能全量覆盖'); return; }
+  if(!MCP.dirty){ toast('没有改动', 'warn', '当前勾选与已保存集合一致'); return; }
+  var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+  if(!boxes.length){ toast('先刷新目录', 'warn'); return; }
+  /* 保存计划：勾选的保留完整模型定义（原样回传），未勾选的从数组移除。
+     全量覆盖是破坏性动作 ⇒ 先确认，取消时一个字节都不写。 */
+  var keepDefs = [];
+  var keepCount = 0;
+  var source = MCP._defs || {};
+  for(var i=0;i<boxes.length;i++){
+    var idx = Number(boxes[i].getAttribute('data-mc'));
+    var m = MCP.models[idx];
+    if(!m) continue;
+    var gid = 'meoo-' + String(m.name||'');
+    if(boxes[i].checked){ keepCount++; if(source[gid]) keepDefs.push(source[gid]); }
+  }
+  if(!keepCount){ toast('至少保留一个模型', 'warn', '全部取消会把「'+CPA_ENTRY_NAME+'」通道的所有模型摘掉'); return; }
+  openModal('保存模型选用？',
+    '<div class="hint">将把 <b>'+keepCount+'</b> 个模型注册进 CPA「'+esc(CPA_ENTRY_NAME)+'」条目（共 '+boxes.length+' 个候选）；未勾选的会从该条目的注册列表移除。</div>'
+    + '<div class="hint">这是对宿主 config.yaml 中「'+esc(CPA_ENTRY_NAME)+'」条目 models 列表的<b>全量覆盖</b>（api-key 等其它字段不动）；宿主热加载后数秒内生效，随时可以勾回来。</div>',
+    '<button type="button" class="sec" onclick="closeModal()">取消</button>'
+    + '<button type="button" onclick="mcDoSave(this)">确认保存</button>');
+}
+function mcDoSave(btn){
+  var boxes = document.querySelectorAll('.mc-grid input[type=checkbox][data-mc]');
+  var keepDefs = [];
+  var source = MCP._defs || {};
+  for(var i=0;i<boxes.length;i++){
+    if(!boxes[i].checked) continue;
+    var m = MCP.models[Number(boxes[i].getAttribute('data-mc'))];
+    if(m && source['meoo-' + String(m.name||'')]) keepDefs.push(source['meoo-' + String(m.name||'')]);
+  }
+  btn.disabled = true;
+  hostApi('/openai-compatibility', {method:'PATCH', body: JSON.stringify({name: CPA_ENTRY_NAME, value:{models: keepDefs}})}).then(function(d){
+    closeModal();
+    if(d && d.error){ toast('保存失败', 'err', d.error); return; }
+    MCP.dirty = false;
+    var live = {};
+    for(var j=0;j<boxes.length;j++){
+      var m2 = MCP.models[Number(boxes[j].getAttribute('data-mc'))];
+      if(m2) live['meoo-' + String(m2.name||'')] = boxes[j].checked;
+    }
+    MCP.enabled = live;
+    renderModelPicker();
+    toast('选用结果已保存', 'ok', '宿主热加载后数秒内生效；被移除的模型随时可以勾回来');
+  }).catch(function(e){
+    btn.disabled = false;
+    toast('保存失败', 'err', e.message);
+  });
+}
+
+/* ---------- 加账号 / 移除（全部自绘弹窗） ---------- */
+function askAdd(btn){
+  openModal('加一个 Meoo 账号',
+    '<div class="hint">粘贴<b>用户级</b> key（以 <code>meoo_ak_</code> 开头，来自秒悟开放平台）。项目级 key（以 <code>meoo_project_service_v1.</code> 开头）不接受 —— 那是模型网关用的另一套凭据。</div>'
+    + '<div class="hint">key 只写进本插件自己的账号文件，接口只回尾号；面板不写 localStorage。</div>'
+    + '<input id="addKey" type="password" class="field-input" placeholder="meoo_ak_…" autocomplete="off">'
+    + '<input id="addLabel" type="text" class="field-input" placeholder="备注（可选，例如「好看的风」）" autocomplete="off">',
+    '<button type="button" class="sec" onclick="closeModal()">取消</button>'
+    + '<button type="button" onclick="doAdd(this)">添加</button>');
+  var i = $('addKey'); if(i) i.focus();
+}
+function doAdd(btn){
+  var key = String($('addKey') ? $('addKey').value : '').trim();
+  var label = String($('addLabel') ? $('addLabel').value : '').trim();
+  if(!key){ toast('还没有粘贴 key', 'warn', '需要以 meoo_ak_ 开头的用户级 key'); return; }
+  btn.disabled = true;
+  api(BASE + '/accounts/add', {method:'POST', body: JSON.stringify({user_key:key, label:label})}).then(function(d){
+    if(d && d.error){ btn.disabled = false; toast('添加失败', 'err', d.error); return; }
+    closeModal();
+    var added = (d && d.added) || {};
+    toast('已添加 '+(added.label||added.key_tail||''), 'ok', '只记了尾号 '+(added.key_tail||''));
+    return load(true);
+  }).catch(function(e){
+    btn.disabled = false;
+    toast('添加失败', 'err', e.message);
+  });
+}
+
+function askRemove(btn){
+  pendingRemoveId = (btn && btn.getAttribute) ? String(btn.getAttribute('data-id')||'') : '';
+  if(!pendingRemoveId){ toast('这一行没有 id', 'warn', '重载面板后再试'); return; }
+  openModal('移除这个账号？',
+    '<div class="hint">只从本插件的账号文件里删掉这一行（id <code>'+esc(pendingRemoveId)+'</code>）。<b>CPA 的配置与秒悟账号本身一个字节都不动</b>；要重新加回来，把 key 再粘一次即可。</div>',
+    '<button type="button" class="sec" onclick="closeModal()">取消</button>'
+    + '<button type="button" onclick="doRemove(this)">确认移除</button>');
+}
+function doRemove(btn){
+  var id = pendingRemoveId;
+  if(!id){ closeModal(); return; }
+  btn.disabled = true;
+  api(BASE + '/accounts/remove', {method:'POST', body: JSON.stringify({id:id})}).then(function(d){
+    closeModal();
+    if(d && d.error){ toast('移除失败', 'err', d.error); return; }
+    if(d && d.removed === false){ toast('没删掉这一行', 'warn', '面板会重新读一次账号列表'); }
+    else { toast('已移除', 'ok', '账号文件里少了一行'); }
+    return load(true);
+  }).catch(function(e){
+    btn.disabled = false;
+    toast('移除失败', 'err', e.message);
+  });
+}
+
+/* ---------- 轮询（5 分钟，隐藏标签页与弹窗打开时跳过） ---------- */
+function startPolling(){
+  if(pollTimer) return;
+  pollTimer = setInterval(function(){
+    if(document.hidden || pollBusy) return;
+    if($('modalMask').classList.contains('show')) return;
+    if(!getKey()) return;
+    pollBusy = true;
+    load(false).then(function(){ pollBusy=false; }, function(){ pollBusy=false; });
+  }, POLL_MS);
+}
+function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
+function setAutoPoll(on){
+  ssSet(POLL_KEY, on ? "1" : "0");
+  if(on) startPolling(); else stopPolling();
+  toast(on ? '已开启自动轮询' : '已暂停自动轮询', on ? 'ok' : 'warn', on ? '每 5 分钟读一次宿主缓存，零上游' : '仍可用「刷新数据」手动读取');
+}
+
+function saveKey(){
+  var v = $('keyInput').value.trim();
+  if(!v) return;
+  sessionStorage.setItem(SS_KEY, v);
+  $('authBox').style.display = 'none';
+  load(false);
+}
+
+/* ---------- 启动 ---------- */
+if(window.__lyThemeSync) window.__lyThemeSync();
+var savedPoll = ssGet(POLL_KEY);
+if(savedPoll !== "0"){ startPolling(); }
+$('autoPoll').checked = savedPoll !== "0";
+if(getKey()){ load(false); } else { showAuth(); }
+</script>
+</body>
+</html>

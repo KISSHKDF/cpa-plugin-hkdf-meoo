@@ -1,0 +1,26 @@
+# Line-ending policy for this repository.
+#
+# Why this file exists (finding m9 of the 2026-10-07 audit): core.autocrlf was
+# true and there was no .gitattributes, so the working tree mixed CRLF and LF
+# (62 of the text files were CRLF). `gofmt -l .` therefore reported 76 files as
+# unformatted — almost all of it pure EOL noise — which made gofmt useless as a
+# gate and buried the 10 files with REAL formatting drift.
+#
+# The default is LF for every text file, stated explicitly rather than left to
+# `* text=auto` (which converts to the NATIVE ending on checkout, i.e. CRLF on
+# this host, and would put the tree straight back out of sync with
+# scripts/normalize-eol.mjs). Only the Windows script types keep CRLF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.vbs text eol=crlf
+# Binary artifacts must never be normalized or diffed as text.
+*.dll  binary
+*.exe  binary
+*.so   binary
+*.h    binary
+*.zip  binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
