@@ -363,6 +363,21 @@ func businessDay(now time.Time) string {
 	return fmt.Sprintf("%04d-%02d-%02d", now.Year(), now.Month(), now.Day())
 }
 
+// todayBatchFace returns the face value of today's login-grant batch (0 = none).
+//
+// The batch Amount is the site-advertised reward; it is the amount the ALREADY
+// path reports so both outcomes (granted / already) badge the same "今日 +2,000"
+// figure — an "already" without an amount made the operator read two different
+// verdicts out of one identical fact (2026-11-22 operator question).
+func todayBatchFace(ledger dailyLoginLedger, day string) int {
+	for _, b := range ledger.Batches {
+		if len(b.Effective) >= 10 && b.Effective[:10] == day {
+			return int(b.Amount)
+		}
+	}
+	return 0
+}
+
 // claimedToday reports whether the ledger already holds a batch for this business
 // day.
 //
@@ -403,7 +418,15 @@ func claimDailyLogin(account accountRecord, now time.Time) (dailyLoginAttempt, e
 	if claimedToday(before, day) {
 		attempt.Outcome = claimAlready
 		attempt.State.Outcome = claimAlready
-		attempt.State.Note = "今日登录赠送积分已到账"
+		// The face value comes from the ledger's own batch: whoever claimed it
+		// (another channel, an earlier sweep, the operator's browser), the money
+		// is the same 2,000 and the badge should say so (2026-11-22).
+		if face := todayBatchFace(before, day); face > 0 {
+			attempt.State.GrantedAmount = face
+			attempt.State.Note = fmt.Sprintf("今日登录赠送 %d 积分已到账（本机自动化之外的动作先领了，本插件确认后未重复领取）", face)
+		} else {
+			attempt.State.Note = "今日登录赠送积分已到账"
+		}
 		return attempt, nil
 	}
 
@@ -466,7 +489,12 @@ func claimDailyLogin(account accountRecord, now time.Time) (dailyLoginAttempt, e
 	if claimedToday(after, day) {
 		attempt.Outcome = claimAlready
 		attempt.State.Outcome = claimAlready
-		attempt.State.Note = "今日登录赠送积分已到账"
+		if face := todayBatchFace(after, day); face > 0 {
+			attempt.State.GrantedAmount = face
+			attempt.State.Note = fmt.Sprintf("今日登录赠送 %d 积分已到账", face)
+		} else {
+			attempt.State.Note = "今日登录赠送积分已到账"
+		}
 		return attempt, nil
 	}
 	attempt.Outcome = claimFailed

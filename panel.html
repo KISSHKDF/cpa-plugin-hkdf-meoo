@@ -727,7 +727,7 @@ function card(a){
   var dl = a.daily_login || {};
   var dlOutcome = String(dl.outcome||'');
   var dlPill = dlOutcome==='granted' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已领取'))+'">今日 +'+fmtNum(dl.granted_amount||2000)+'</span>'
-            : dlOutcome==='already' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已到账'))+'">今日已领</span>'
+            : dlOutcome==='already' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已到账'))+'">今日 +'+fmtNum(dl.granted_amount||2000)+'</span>'
             : dlOutcome==='needs_login' ? '<span class="cd-pill dead" title="'+esc(String(dl.note||'需要人工登录'))+'">待登录</span>'
             : dlOutcome==='failed' ? '<span class="cd-pill stale" title="'+esc(String(dl.note||'本次未领取到'))+'">今日未领</span>'
             : '<span class="cd-pill" title="插件会在每天零点后自动尝试领取">未尝试</span>';
