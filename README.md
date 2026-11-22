@@ -145,7 +145,10 @@ plugins:
     configs:
         hkdf-meoo:
             refresh_minutes: 60      # 1..1440, cache TTL and background period
-            auto_provision: true     # create a project / enable its cloud when missing
+            auto_provision: false    # default false (read-only walk). true = create a
+                                     # project / enable its cloud when missing. An
+                                     # account that already holds a project-level AK is
+                                     # never provisioned regardless of this switch.
             project_name: CPA-Model-Gateway   # name used when one is created
             daily_login: true        # claim the daily 2,000-point login reward
 ```

@@ -1115,6 +1115,69 @@ func TestProjectAKProbeNeverProvisionsWhenNoProjectHasACloudInstance(t *testing.
 	})
 }
 
+// TestAKHoldingAccountIsNeverProvisioned is the regression for the 2026-11-22
+// incident: an account that already holds a project-level AK must NEVER trigger
+// the cloud-enable POST, even with auto_provision on. The measured account kept
+// retrying enableCloud on its key-less first-active project every sweep, and on
+// a Free plan every attempt answered 云服务实例数已达上限 — a write that could
+// never succeed and pinned the same refusal note to every reading.
+func TestAKHoldingAccountIsNeverProvisioned(t *testing.T) {
+	// The walk's chosen project is key-less; the usable key is the STORED one
+	// from an earlier walk (it lives on another project upstream).
+	rows := []fakeProjectRow{
+		activeRow("o1gyf6uzfh9f", "本地客户端咨询", false, ""),
+		activeRow("l1l7coxwlq0f", "CPA-Model-Gateway", true, fakeProjectAK),
+	}
+
+	t.Run("auto_provision 开启也绝不为已持有 AK 的账号点开通", func(t *testing.T) {
+		isolateMeoo(t)
+		setConfigForTest(t, func(cfg *pluginConfig) { cfg.AutoProvision = true })
+		platform := newFakeOpenPlatform()
+		platform.projects = rows
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey, ProjectURLID: "l1l7coxwlq0f", ProjectAK: fakeProjectAK})
+
+		if platform.cloudPOSTs != 0 {
+			t.Fatalf("an AK-holding account must never trigger enableCloud, saw %d POST(s): %v", platform.cloudPOSTs, platform.callList())
+		}
+		if platform.sawCall("POST /cli-compat/projects") {
+			t.Fatal("an AK-holding account must never trigger createProject either")
+		}
+		if read.ProjectAK != fakeProjectAK {
+			t.Fatalf("the stored key must survive the walk: %q", read.ProjectAK)
+		}
+		if !strings.Contains(read.Note, "已持有项目级 AK") {
+			t.Fatalf("the note must say why nothing was provisioned: %s", read.Note)
+		}
+	})
+
+	t.Run("默认配置就是只读（出厂即不开通）", func(t *testing.T) {
+		isolateMeoo(t)
+		if defaultConfig().AutoProvision {
+			t.Fatal("auto_provision must default to false: unrequested upstream writes are never acceptable")
+		}
+		platform := newFakeOpenPlatform()
+		platform.projectsEmpty = true
+		swapOpenPlatform(t, platform.server(t).URL)
+
+		// A register-shaped configure() with NO auto_provision key must land on
+		// the read-only default, not on the old opt-out default.
+		configure(mustConfigYAML(t, "refresh_minutes: 15\n"))
+		if currentAutoProvision() {
+			t.Fatal("an absent auto_provision key must parse to the default (false)")
+		}
+
+		read := readAccount(accountRecord{ID: "abc", UserKey: fakeUserKey})
+		if platform.cloudPOSTs != 0 || platform.sawCall("POST /cli-compat/projects") {
+			t.Fatalf("the read-only default wrote upstream: %v", platform.callList())
+		}
+		if !strings.Contains(read.Note, "auto_provision=false") {
+			t.Fatalf("the note must say why nothing was provisioned: %s", read.Note)
+		}
+	})
+}
+
 // TestProjectLegStaysSingleShotWhenAKeyIsAlreadyFound: the probe is a FALLBACK,
 // not an extra round of requests. As long as the existing walk yields a
 // project-level key, the sequence must stay byte-for-byte the documented one.

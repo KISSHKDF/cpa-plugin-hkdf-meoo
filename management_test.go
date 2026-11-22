@@ -213,7 +213,9 @@ func TestUnifiedPayloadShapeFromRefresh(t *testing.T) {
 		`"readable":0`, `"dead":0`, `"stale":0`, `"refreshed_count":0`,
 		`"refresh_minutes":60`, `"served_from_cache":true`, `"last_attempt_at":null`,
 		`"total_available":null`, `"total_granted":null`, `"total_consumed":null`,
-		`"auto_provision":true`, `"project_name":"CPA-Model-Gateway"`,
+		// 2026-11-22: auto_provision defaults OFF (read-only walk); this line is
+		// the contract that a fresh install must not be able to write upstream.
+		`"auto_provision":false`, `"project_name":"CPA-Model-Gateway"`,
 	} {
 		if !strings.Contains(body, needle) {
 			t.Errorf("the refresh payload is missing %s: %s", needle, body)

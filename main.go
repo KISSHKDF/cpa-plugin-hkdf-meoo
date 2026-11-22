@@ -50,7 +50,7 @@
 // the management API and NEVER rendered into the panel: the panel only ever sees
 // key_tail (the last four characters) and the row id (a sha256 prefix). The
 // upstream calls are read-only except for the two provisioning POSTs, and those
-// fire only when the operator has left auto_provision at its default.
+// fire only when the operator has explicitly opted in via auto_provision=true.
 package main
 
 /*
@@ -141,7 +141,12 @@ const providerName = "hkdf-meoo"
 //	meoo_ak_*/meoo_project_service_v1.* 是上游服务的名字，不属于本插件 id，保持不动；
 //	数据目录 %USERPROFILE%\.meoo-cpa 指向的是秒悟服务的数据，一并保持（迁数据有弄丢
 //	已登录会话的风险，且该目录名不参与 id 契约）。
-var version = "2026.11.22.2"
+//	2026.11.22.3: 自动开通纪律收紧（2026-11-22 主人裁定「能取消的自动动作一律取消」）。
+//	auto_provision 出厂默认 true→false（新装即只读巡检，开通必须显式 opt-in）；已持有
+//	项目级 AK 的账号无论开关状态都绝不触发开通 POST——巡检盯住的首个 active 项目可能
+//	没有云实例，而账号可用实例在别的项目上，逐轮去点开通只会撞 Free 版账号级实例上限
+//	（实测 2026-11-22「好看的风」账号：每轮巡检钉上「云服务实例数已达上限」）。
+var version = "2026.11.22.3"
 
 var hostAPI *C.cliproxy_host_api
 
@@ -352,7 +357,7 @@ type registrationCapability struct {
 // the panel echoes it and /health reports it. See config.go.
 var meooConfigFields = []pluginapi.ConfigField{
 	{Name: "refresh_minutes", Type: pluginapi.ConfigFieldTypeInteger, Description: "Cache lifetime and background refresh period, in minutes. Reads inside the window are served from cache with zero upstream calls. Default 60, clamped to 1..1440."},
-	{Name: "auto_provision", Type: pluginapi.ConfigFieldTypeBoolean, Description: "When an account owns no active project (or its cloud instance is not enabled yet), create/enable it automatically on the next walk. Default true. Set false to inspect-only."},
+	{Name: "auto_provision", Type: pluginapi.ConfigFieldTypeBoolean, Description: "When an account owns no active project (or its cloud instance is not enabled yet), create/enable it automatically on the next walk. Default false (read-only walk; 2026-11-22 operator ruling). Set true to opt in. An account that already holds a project-level AK is never provisioned regardless of this switch."},
 	{Name: "project_name", Type: pluginapi.ConfigFieldTypeString, Description: "Name given to a project this plugin creates for an account that has none. Default CPA-Model-Gateway."},
 	{Name: "daily_login", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Automatically claim Meoo's daily 2,000-point login reward, using the web session already stored in this machine's browser profile for that account. Default true. Set false to stop the plugin from reading any browser profile."},
 }

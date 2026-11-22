@@ -12,7 +12,7 @@
 // reports DECLARED_NOT_PARSED — correctly.
 //
 // Pointer fields exist so "absent" is distinguishable from "false"/"0"/"". Absent
-// means: enabled, 60 minutes, auto-provision on, project name CPA-Model-Gateway.
+// means: enabled, 60 minutes, auto-provision OFF, project name CPA-Model-Gateway.
 //
 // ---------------------------------------------------------------------------
 // `enabled` is parsed but deliberately NOT declared
@@ -37,8 +37,8 @@ import (
 // refreshMinutesDefault is the agreed behaviour: the panel's readings may be up
 // to an hour old unless the operator presses 刷新数据. Every upstream read in
 // this contract is a read-only query (the two provisioning POSTs are gated by
-// auto_provision and only fire once per account), so the window is about
-// politeness and latency, not points.
+// auto_provision — default OFF — and only fire once per account), so the window
+// is about politeness and latency, not points.
 const (
 	refreshMinutesDefault = 60
 	refreshMinutesMin     = 1
@@ -79,11 +79,15 @@ type pluginConfig struct {
 }
 
 // defaultConfig is the state before any register call.
+//
+// AutoProvision defaults OFF (2026-11-22 operator ruling: unrequested automatic
+// upstream writes are never acceptable) — a fresh install walks READ-ONLY and
+// provisioning must be an explicit operator decision.
 func defaultConfig() pluginConfig {
 	return pluginConfig{
 		Enabled:        true,
 		RefreshMinutes: refreshMinutesDefault,
-		AutoProvision:  true,
+		AutoProvision:  false,
 		ProjectName:    projectNameDefault,
 		DailyLogin:     true,
 	}

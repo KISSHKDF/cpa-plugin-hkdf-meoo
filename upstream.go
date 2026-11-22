@@ -701,6 +701,16 @@ type projectLeg struct {
 // account-scoped) and load-bearing for the GATEWAY (the project-level AK only
 // exists there). So every failure in this leg is a note, never an account
 // verdict: an account whose project leg failed still shows its points.
+//
+// 2026-11-22: an account that ALREADY holds a project-level AK never triggers
+// the cloud-enable POST, regardless of auto_provision. The walk's chosen
+// project can be a key-less one while the account's usable instance lives
+// elsewhere (the 2026-11-22 measured account: first-active "本地客户端咨询"
+// without cloud, usable key on another project); auto-enabling the chosen
+// project then hits the plan's account-level instance quota every sweep and
+// pins the same refusal note to every reading. There is nothing to recover —
+// the gateway key is in hand — so provisioning would be a pure write with no
+// possible upside.
 func resolveProject(userKey string, stored accountRecord) projectLeg {
 	leg := projectLeg{URLID: stored.ProjectURLID, AK: stored.ProjectAK}
 
@@ -750,6 +760,12 @@ func resolveProject(userKey string, stored accountRecord) projectLeg {
 		leg.Note = joinNotes(leg.Note, "云服务状态读取失败："+note(errCloud.Error()))
 	case cloud.Enabled:
 		leg.CloudEnabled = true
+	case leg.AK != "":
+		// The account already holds a project-level AK: the gateway leg has
+		// nothing to recover, so enabling this project's cloud would be a write
+		// with no possible upside. On a plan whose instance quota is exhausted it
+		// also pins the same refusal note to every sweep (2026-11-22).
+		leg.Note = joinNotes(leg.Note, "云服务未开通，但账号已持有项目级 AK，不自动开通")
 	case !currentAutoProvision():
 		leg.Note = joinNotes(leg.Note, "云服务未开通，且 auto_provision=false，未自动开通")
 	default:
