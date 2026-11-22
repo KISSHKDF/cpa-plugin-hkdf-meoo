@@ -1,5 +1,7 @@
 # hkdf-meoo
 
+<p align="center"><img src="assets/logo.png" width="64" alt="hkdf-meoo logo" /></p>
+
 CPA (CLIProxyAPI) plugin — a read-only 秒悟 (Meoo) panel: points, plan, the project
 each key owns, and the project-level AK the model gateway wants.
 
