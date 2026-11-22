@@ -598,17 +598,40 @@ function renderSummary(){
   var covered = s.today_valid||0;
   var cover = (covered < g.readable) ? '（今日已用只覆盖 <span class="num">'+covered+'/'+g.readable+'</span> 个号；其余今天还没有可比基线）' : '';
   var pct = (tt!=null && tt>0 && tu!=null) ? Math.max(0, Math.min(100, tu/tt*100)) : null;
-  /* 条画「手里还剩」：剩余段锚定左端、宽度=剩余占比，从右端向左缩（loomy/workbuddy 同方向）。 */
-  var barColorToday = 'var(--ok)'; if(pct!=null){ if(pct>80) barColorToday='var(--err)'; else if(pct>50) barColorToday='var(--warn)'; }
+  /* 血槽（workbuddy 2026.10.25.1 逐字对齐，2026-11-22 主人裁定「但凡能对齐 workbuddy 的严格对齐」）：
+     汇总条画游戏血条：总血量 = 底血（昨天收盘剩余）+ 黄段（今天进账）；右端透明缺口 = 已扣。
+     剩余段锚定左端，消耗的缺口在右端、随消耗向左生长——先吃黄段再吃绿段。 */
+  var bl = s.blood||null;
   var notes = (s.notes||[]).map(function(n){ return '<div class="pb-meta pb-warn">'+esc(n)+'</div>'; }).join('');
   var cumTitle = '累计口径对照（不画成进度条）：总可用 '+fmtNum(s.total_available)+' · 总已耗 '+fmtNum(s.total_consumed)+' · 总量 '+fmtNum(s.total_granted)
     + (s.total_expired!=null ? (' · 已过期 '+fmtNum(s.total_expired)) : '')
-    + '\n\n今日口径：今日总量 = 今日结算剩余 + 今日已用；基线 = 每个号今天第一次读到的 consumed/available，0 点重置。'
+    + '\n\n血槽（悬停算法）：总血量 = 底血（昨天最后一次读到的剩余，即昨收盘）+ 黄段（今天进账）。'
+    + '\n黄段 = 三条证据取最大不相加：上游账本的今日「登录赠送」批次面额 / 昨收至今差额 / 此刻比底血多出的量。'
+    + '\n右端缺口（已扣）= 总血量 − 此刻剩余，含夜间耗损与今日消耗。恒等式：总血量 − 已扣 = 此刻剩余。'
+    + '\n今日口径：今日总量 = 今日结算剩余 + 今日已用；基线 = 每个号今天第一次读到的 consumed/available，0 点重置。'
     + '\n今日已用 = 每号（最近一次 consumed − 今天第一次读到的 consumed）相加。'
-    + (s.today_gain!=null ? ('\n今日获取 +'+fmtNum(s.today_gain)+' = 今天有进账的号（此刻余额比日初基线多出的量）相加。') : '')
+    + (s.today_gain!=null ? ('\n今日获取 +'+fmtNum(s.today_gain)+' = 基线差值口径（今天有进账的号相加）。血槽行的「今日进账」按台账/昨收盘口径另算，两者不同源。') : '')
     + '\n缓存时间 '+(s.last_attempt_at||'—')+' · 服务器时间 '+textOr(lastPayload.server_time)
     + ' · 刷新窗口 '+(s.refresh_minutes==null?'—':s.refresh_minutes)+' 分钟 · 本次'+(s.served_from_cache?'读的是缓存':'已走上游')
     + (lastPayload.cache_path ? ('\n缓存文件 '+lastPayload.cache_path) : '');
+  var bloodBar, bloodMeta;
+  if(bl && bl.rows>0 && bl.total>0){
+    var dmgPts=Math.max(0,Math.min(bl.total,bl.damage));
+    var buffPts=Math.max(0,Math.min(bl.buff,bl.total)-dmgPts);
+    var greenPts=Math.max(0,bl.total-dmgPts-buffPts);
+    var segPct=function(n){ return Math.min(100,Math.max(0,n/bl.total*100)); };
+    var degrade = bl.today_first>0 ? ' <span style="color:var(--mut)">；'+bl.today_first+' 个号昨天没有收盘记录，底血取今日首读</span>' : '';
+    bloodBar = '<div class="pb-track" style="display:flex">'
+      + '<div class="pb-bar" style="width:'+segPct(greenPts).toFixed(2)+'%;background:var(--ok);border-top-left-radius:99px;border-bottom-left-radius:99px"></div>'
+      + '<div class="pb-bar" style="width:'+segPct(buffPts).toFixed(2)+'%;background:var(--warn);border-radius:0"></div>'
+      + '<div class="pb-bar" style="width:'+segPct(dmgPts).toFixed(2)+'%;background:transparent;border-radius:0"></div>'
+      + '</div>';
+    bloodMeta = '<div class="pb-meta">总血量 <span class="num">'+fmtNum(bl.total)+'</span>（底血 <span class="num">'+fmtNum(bl.base)+'</span> + 今日进账 <span style="color:var(--warn);font-weight:600">+<span class="num">'+fmtNum(bl.buff)+'</span></span>）· 已扣 <span class="num">'+fmtNum(bl.damage)+'</span> · 此刻剩 <span class="num">'+fmtNum(bl.remain)+'</span>'+degrade+' <span style="color:var(--mut)">（悬停看算法）</span></div>';
+  } else {
+    var barColorToday = 'var(--ok)'; if(pct!=null){ if(pct>80) barColorToday='var(--err)'; else if(pct>50) barColorToday='var(--warn)'; }
+    bloodBar = '<div class="pb-track"><div class="pb-bar" style="width:'+(pct==null?0:(100-pct)).toFixed(1)+'%;background:'+(pct==null?'var(--surface-muted)':barColorToday)+'"></div></div>';
+    bloodMeta = '';
+  }
   var todayLine;
   if(tu==null || tt==null){
     todayLine = '<div class="pb-meta">今日结算剩余 <span class="num">'+fmtNum(tr)+'</span> · 今日已用 未知（今天还没有任何号建立可比基线；打开面板或点「刷新数据」后就有） <span style="color:var(--mut)">· 未知不按 0 计</span></div>';
@@ -617,6 +640,10 @@ function renderSummary(){
       + (tg!=null ? (' · <span style="color:var(--ok);font-weight:600">今日获取 <span class="num">+'+fmtNum(tg)+'</span></span>') : '')
       + cover + ' <span style="color:var(--mut)">（悬停看算法与累计对照）</span></div>';
   }
+  var headLabel = (bl && bl.rows>0 && bl.total>0) ? '血槽 · 总血量 / 已扣' : '今日已用 / 今日总量';
+  var headRight = (bl && bl.rows>0 && bl.total>0)
+    ? ('手里还剩 <span class="num">'+fmtPct(Math.min(100,Math.max(0,bl.remain/bl.total*100)))+'</span>')
+    : (pct==null?'今日已用 未知':('手里还剩 <span class="num">'+fmtPct(100-pct)+'</span>'));
   box.style.display = 'block';
   box.innerHTML =
       '<div class="summary-hd">'
@@ -624,8 +651,9 @@ function renderSummary(){
     +   '<div class="summary-meta">'+meta+'</div>'
     + '</div>'
     + '<div class="pb" title="'+esc(cumTitle)+'">'
-    +   '<div class="pb-label"><span>今日已用 / 今日总量</span><span>'+(pct==null?'今日已用 未知':('手里还剩 <span class="num">'+fmtPct(100-pct)+'</span>'))+'</span></div>'
-    +   '<div class="pb-track"><div class="pb-bar" style="width:'+(pct==null?0:(100-pct)).toFixed(1)+'%;background:'+(pct==null?'var(--surface-muted)':barColorToday)+'"></div></div>'
+    +   '<div class="pb-label"><span>'+headLabel+'</span><span>'+headRight+'</span></div>'
+    +   bloodBar
+    +   bloodMeta
     +   todayLine
     + '</div>'
     + notes;
@@ -654,20 +682,47 @@ function card(a){
   var total = (a.granted==null) ? null : num0(a.granted);
   var pct = (used!=null && total!=null && total>0) ? Math.max(0, Math.min(100, used/total*100)) : null;
   /* 读不到读数时不画"满格灰条"：灰条会被读成"已经用光"。只留空轨道。
-     段序与 loomy 面板一致：先画「剩下的」（绿色、贴左），再画「用掉的」（灰、挂右端）。
-     以前 used 段在前，绿条从左往右长，看上去像积分从左边被吃掉；loomy 是从右边吃。 */
-  var remain = (used==null || total==null) ? null : Math.max(0, total-used);
-  var bar = '<div class="cd-bar">'
-    + (pct==null ? '' :
-        ((remain>0 ? '<span class="cd-seg" style="flex:'+remain.toFixed(2)+' 1 0"></span>' : '')
-       + (used>0 ? '<span class="cd-seg used" style="flex:'+used.toFixed(2)+' 1 0"></span>' : '')))
-    + '</div>';
+     血槽（workbuddy 2026.10.25.1 逐字对齐，2026-11-22 主人裁定）：三段游戏血条——
+     左绿=底血（昨天收盘剩余），左二黄=今日进账，右端透明缺口=已扣（总血量−此刻剩余）。
+     剩余段锚定左端，消耗的缺口在右端、随消耗向左生长——先吃黄段再吃绿段。
+     累计口径（consumed/granted）只在悬停里当对照，不再画成进度条。 */
+  var remainCum = (used==null || total==null) ? null : Math.max(0, total-used);
+  var bl = a.blood||null;
+  var bar;
+  if(bl && bl.base_hp!=null && bl.total_hp>0){
+    var dmgPts=Math.max(0,Math.min(bl.total_hp,bl.damage_taken));
+    var buffPts=Math.max(0,Math.min(bl.buff_today,bl.total_hp)-dmgPts);
+    var greenPts=Math.max(0,bl.total_hp-dmgPts-buffPts);
+    var seg=function(n){ return Math.min(100,Math.max(0,n/bl.total_hp*100)); };
+    var blTitle='血槽 = 游戏血条读法：总血量 '+fmtNum(bl.total_hp)+' = 底血 '+fmtNum(bl.base_hp)
+      + (bl.base_source==='yesterday_close' ? '（昨天收盘剩余）' : '（今天首读——该号昨天没有收盘记录，不是结转）')
+      + ' + 黄段 '+fmtNum(bl.buff_today)+'（今天进账：上游账本今日「登录赠送」批次面额 / 昨收至今差额 / 此刻比底血多出的量，三条取最大不相加）。'
+      + '\n右端缺口 '+fmtNum(bl.damage_taken)+' = 总血量 − 此刻剩余 '+fmtNum(a.available)+'（夜间耗损与今日消耗都在里面）。'
+      + '\n恒等式：总血量 − 已扣 = 此刻剩余。先吃黄段再吃绿段；黄段可见 = max(0, buff − damage)。'
+      + '\n\n累计口径对照（不画成条）：剩余 '+fmtNum(remainCum)+' / 累计已耗 '+fmtNum(used)+' / 总量 '+fmtNum(total)+'。';
+    bar = '<div class="cd-bar" title="'+esc(blTitle)+'">'
+      + (greenPts>0 ? '<span class="cd-seg" style="flex:'+greenPts.toFixed(2)+' 1 0" title="底血 '+fmtNum(bl.base_hp)+'（昨天结转）"></span>' : '')
+      + (buffPts>0 ? '<span class="cd-seg" style="flex:'+buffPts.toFixed(2)+' 1 0;background:var(--warn)" title="今日进账 '+fmtNum(bl.buff_today)+'"></span>' : '')
+      + (dmgPts>0 ? '<span class="cd-seg" style="flex:'+dmgPts.toFixed(2)+' 1 0;background:transparent" title="已扣 '+fmtNum(bl.damage_taken)+'"></span>' : '')
+      + '</div>';
+  } else {
+    var cumTitle='累计口径对照（不画成条）：剩余 '+fmtNum(remainCum)+' / 累计已耗 '+fmtNum(used)+' / 总量 '+fmtNum(total)
+      + '\n血槽今天还没建立（该号昨天没有收盘、今天也没有可比读数）：打开面板或点 ↻ 之后就有。';
+    bar = '<div class="cd-bar" title="'+esc(cumTitle)+'">'
+      + (pct==null ? '' :
+          ((remainCum>0 ? '<span class="cd-seg" style="flex:'+remainCum.toFixed(2)+' 1 0"></span>' : '')
+         + (used>0 ? '<span class="cd-seg used" style="flex:'+used.toFixed(2)+' 1 0"></span>' : '')))
+      + '</div>';
+  }
   var akState = String(a.project_ak_state||'');
   var akTail = esc(String(a.project_ak_tail||'').trim());
-  var akText = akTail ? ('尾号 '+akTail) : '（没有）';
-  if(akTail && akState && akState!=='ok') akText = '尾号 '+akTail+'（'+esc(akState)+'）';
-  var note = a.note ? '<div class="cd-msg'+((dead||stale)?' err':'')+'" title="'+esc(a.note)+'">'+esc(a.note)+'</div>' : '';
-  /* 每日登录赠送积分（2,000/天）：状态来自后端，每行都带 —— 没领到也要看得见。 */
+  /* AK 行 = 用户唯一关心的语义：这条反代通道现在能不能用。key 尾号只用于身份
+     辨认（面板永不显示完整密钥）；项目名/url_id 是上游的内部组织，用户不关心，
+     2026-11-22 主人裁定从卡面删除（数据仍在 /accounts payload 里，悬停可查）。 */
+  var akBadge = akTail
+    ? '<span class="cd-pill ok" title="项目级 AK（模型网关的钥匙）已就位，尾号 '+akTail+'。反代通道可用。">反代可用</span>'
+    : '<span class="cd-pill dead" title="这个账号还没有项目级 AK：模型网关（反代）通道没有凭据可用。点「刷新数据」重走发现链，或先在秒悟账号下建好项目与云服务。">网关无凭据</span>';
+  var note = a.note ? '<div class="cd-msg'+((dead||stale)?' err':'')+'" title="'+esc(a.note)+'">'+esc(a.note)+'</div>' : '';  /* 每日登录赠送积分（2,000/天）：状态来自后端，每行都带 —— 没领到也要看得见。 */
   var dl = a.daily_login || {};
   var dlOutcome = String(dl.outcome||'');
   var dlPill = dlOutcome==='granted' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已领取'))+'">今日 +'+fmtNum(dl.granted_amount||2000)+'</span>'
@@ -720,19 +775,16 @@ function card(a){
     + '</div>'
     + '<div class="cd-credit-line">'
     +   '<span class="cd-credit"><span class="cd-lbl">剩余</span><b class="num">'+fmtNum(a.available)+'</b></span>'
-    +   '<span class="cd-credit dim" title="今日已用 = 该号最近一次 consumed − 今天第一次读到的 consumed（日初基线，0 点重置）。未知 = 今天还没有可比基线，不按 0 计。">'
+    +   '<span class="cd-credit dim" title="今日已用 = 该号最近一次 consumed − 今天第一次读到的 consumed（日初基线，0 点重置）。未知 = 今天还没有可比基线，不按 0 计。'
+    +     '今日进账（黄段）= 上游账本今日「登录赠送」批次面额 / 昨收至今差额 / 此刻比底血多出的量，三条取最大不相加——与基线差值口径不同源。悬停横条看血槽算法。">'
     +     '今日已用 '+(a.today_used==null ? '未知' : '<span class="num">'+fmtNum(a.today_used)+'</span>')
-    +     ((a.today_gain!=null) ? ' · <span class="cd-gain">今日获取 <span class="num">+'+fmtNum(a.today_gain)+'</span></span>' : '')
+    +     ((bl && bl.buff_today!=null && bl.buff_today>0) ? ' · <span class="cd-gain" title="今天进账（血槽黄段，三条证据取最大）：'+esc(bl.buff_today>=(a.today_gain||0)?'台账/昨收盘口径':'基线差值口径')+'">今日获取 <span class="num">+'+fmtNum(bl.buff_today)+'</span></span>' : ((a.today_gain!=null) ? ' · <span class="cd-gain">今日获取 <span class="num">+'+fmtNum(a.today_gain)+'</span></span>' : ''))
     +     ((a.expired!=null && num0(a.expired)>0) ? ' · <span title="上游已发放但已过期的积分（不在可用、已耗里），从总量里扣除后才是真正能用的">已过期 '+fmtNum(a.expired)+'</span>' : '')
     +   '</span>'
     + '</div>'
     + bar
     + '<div class="cd-meta" style="margin-top:8px">'
-    +   '<div class="cd-mi"><span class="cd-lbl">项目</span><span class="cd-val" title="'+esc(textOr(a.project_name))+'">'+esc(textOr(a.project_name))+'</span></div>'
-    +   '<div class="cd-mi right"><span class="cd-lbl">url_id</span><span class="cd-val">'+esc(textOr(a.project_url_id))+'</span></div>'
-    + '</div>'
-    + '<div class="cd-meta">'
-    +   '<div class="cd-mi"><span class="cd-lbl">项目级 AK</span><span class="cd-val">'+akText+'</span></div>'
+    +   '<div class="cd-mi"><span class="cd-lbl">反代</span>'+akBadge+'</div>'
     +   '<div class="cd-mi right"><span class="cd-lbl">key 尾号</span><span class="cd-val">'+esc(textOr(a.key_tail))+'</span></div>'
     + '</div>'
     + dlNote

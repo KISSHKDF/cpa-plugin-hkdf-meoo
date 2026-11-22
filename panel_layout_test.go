@@ -249,6 +249,13 @@ func TestPanelDialogsAreSelfDrawn(t *testing.T) {
 // catch a swap. Hence the positional assertions, plus the summary bar's own
 // direction (it used to be a "used progress" bar, i.e. the opposite reading of
 // the card bars on the same card).
+//
+// 2026-11.22.4 血槽对齐（workbuddy 2026.10.25.1，主人裁定「但凡能对齐 workbuddy 的
+// 严格对齐」）：卡条与汇总条升级为三段血槽（绿底血 → 黄今日进账 → 右端透明缺口），
+// 消耗的缺口仍在右端、随消耗向左生长——方向契约不变，断言升级为血槽形态：
+// ① 绿段在黄段之前、黄段在缺口之前（先吃黄再吃绿的渲染前提）；
+// ② 缺口段必须是 transparent（灰色缺口会被读成"还没消耗的余额"）；
+// ③ 血槽不可用时的降级条仍锁旧方向（remain 在前、used 在后）。
 func TestCreditBarsDrainFromTheRight(t *testing.T) {
 	html := string(panelHTML)
 	card := sliceBetween(t, html, "function card(a){", "\nfunction renderGrid(")
@@ -266,20 +273,35 @@ func TestCreditBarsDrainFromTheRight(t *testing.T) {
 	if iRemain > iUsed {
 		t.Fatal("账号卡把「已耗」段画在「剩下」段之前：绿条会从左往右长，看起来像积分从左边被吃掉（loomy 是剩下的贴左、用掉的挂右端）")
 	}
-	if !strings.Contains(card, "remain.toFixed(2)") || !strings.Contains(card, "used.toFixed(2)") {
-		t.Fatalf("进度条的两个段必须分别用 remain / used 的宽度，实际：%s", card)
+
+	// 血槽三段的顺序与颜色（blood 分支）：底血（默认绿）→ 今日进账（黄）→
+	// 已扣缺口（transparent）。黄段在缺口之前是「先吃黄再吃绿」的渲染前提；
+	// 缺口透明是 workbuddy 的原样（灰缺口=假余额）。
+	const buffSeg = `background:var(--warn)" title="今日进账 `
+	const dmgSeg = `background:transparent" title="已扣 `
+	iBuff := strings.Index(card, buffSeg)
+	iDmg := strings.Index(card, dmgSeg)
+	if iBuff < 0 || iDmg < 0 {
+		t.Fatalf("账号卡没有血槽三段（黄=%d 缺口=%d）：必须与 workbuddy 2026.10.25.1 血槽同构", iBuff, iDmg)
 	}
-	// 零宽段不画：used=0 时若仍发一个 flex:0 的灰段，轨道右端会多出 3px 灰边
-	//（.cd-seg 有 min-width:3px 的下限），看上去像"已经用掉一点"。
-	if !strings.Contains(card, "(remain>0 ?") || !strings.Contains(card, "(used>0 ?") {
-		t.Fatal("进度条没有按 >0 过滤零宽段：min-width 会画出假的已耗/剩余边角")
+	if !(iRemain < iBuff && iBuff < iDmg) {
+		t.Fatal("血槽三段顺序错误：必须 底血(绿) → 今日进账(黄) → 已扣缺口(透明缺口挂右端)")
+	}
+	// 血槽段宽来自 base/buff/damage 的 flex 计算，不是旧 remain/used 变量。
+	if !strings.Contains(card, "greenPts.toFixed(2)") || !strings.Contains(card, "buffPts.toFixed(2)") || !strings.Contains(card, "dmgPts.toFixed(2)") {
+		t.Fatal("血槽三段必须分别用 greenPts / buffPts / dmgPts 的宽度（workbuddy 同构）")
+	}
+	// 零宽段不画：flex:0 的段在 .cd-seg 的 min-width:3px 下限会渲染成 3px 假边角。
+	// 血槽分支的零宽过滤写作 (greenPts>0 ? / (buffPts>0 ? / (dmgPts>0 ?。
+	if !strings.Contains(card, "(greenPts>0 ?") || !strings.Contains(card, "(buffPts>0 ?") || !strings.Contains(card, "(dmgPts>0 ?") {
+		t.Fatal("血槽三段没有按 >0 过滤零宽段：min-width 会画出假的已扣/进账边角")
 	}
 
-	// 汇总条与卡片条同一口径（2026.11.21.8 全面转今日口径，与 workbuddy 同构）：
-	// 标题=「今日已用 / 今日总量」，条宽=剩余占比（手里还剩），颜色按剩余取。
-	// 累计口径退到悬停对照，不得再画成进度条。
-	if !strings.Contains(html, "今日已用 / 今日总量") {
-		t.Fatal("汇总条的标题不是「今日已用 / 今日总量」：汇总条必须与卡片条同为今日口径（workbuddy 同构）")
+	// 汇总条与卡片条同一口径（2026.11.21.8 转今日口径；2026.11.22.4 升级血槽，
+	// 与 workbuddy regionBarHtml 同构）：血槽可用时标题=「血槽 · 总血量 / 已扣」，
+	// 三段顺序与卡条一致；血槽不可用时降级条锁旧方向。
+	if !strings.Contains(html, "血槽 · 总血量 / 已扣") {
+		t.Fatal("汇总条缺血槽形态（标题「血槽 · 总血量 / 已扣」）：汇总条必须与卡片条同为血槽（workbuddy 同构）")
 	}
 	if strings.Contains(html, "总可用 / 总总量") || strings.Contains(html, "总可用 / 总量") {
 		t.Fatal("汇总条仍在画累计口径（总可用/总量）：累计数字只能出现在悬停对照里")

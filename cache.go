@@ -72,13 +72,32 @@ type accountSnapshot struct {
 	Frozen     float64 `json:"frozen"`
 	Expired    float64 `json:"expired"`
 
-	// Day baseline (workbuddy "今日已用" 同构): the first OK reading of each
+	// Day baseline (workbuddy「今日已用」同构): the first OK reading of each
 	// local day parks its consumed/available here, so later readings can diff
 	// against it. DayKey is the local YYYY-MM-DD; a different key means the day
 	// rolled over and the baseline is re-stamped by the next OK read.
 	DayKey            string  `json:"day_key,omitempty"`
 	DayStartConsumed  float64 `json:"day_start_consumed,omitempty"`
 	DayStartAvailable float64 `json:"day_start_available,omitempty"`
+
+	// 血槽（workbuddy 2026.10.25.1 逐字对齐，2026-11-22 主人裁定「但凡能对齐
+	// workbuddy 的严格对齐」）：
+	//   PrevCloseAvailable = 昨日最后一次 OK 读数的余额（底血 base_hp 的唯一
+	//   权威来源，BaseSource=yesterday_close）；PrevCloseDay = 它所属的日期。
+	//   没有昨收盘时降级用今日首读当底血（BaseSource=today_first，面板明说
+	//   不是结转，且黄段不许叠台账面额——首读里已含凌晨签到分，叠了就双计）。
+	PrevCloseDay       string  `json:"prev_close_day,omitempty"`
+	PrevCloseAvailable float64 `json:"prev_close_available,omitempty"`
+	// LoginGrantToday 是本次 OK 读数里上游账本报的「今天登录赠送批次」面额和
+	// （上游硬事实；只在写入那一刻有效，跨读数会变，所以不进 view 的差值口径，
+	// 只在 applyResult 当场折进 BuffFromLedger 缓存列）。
+	LoginGrantToday float64 `json:"login_grant_today,omitempty"`
+	// BuffToday（黄段）在 applyResult 里按 workbuddy 三条证据取 max 落盘：
+	// 台账面额（仅 yesterday_close 时允许）/ 昨收至今差额 / 此刻比底血多出的量。
+	BuffToday float64 `json:"buff_today,omitempty"`
+	// BuffSource 记录黄段的降级成因（yesterday_close / today_first / unknown），
+	// 面板用它说「为什么黄段可能偏短」。
+	BuffSource string `json:"buff_source,omitempty"`
 
 	PlanCode string `json:"plan_code,omitempty"`
 	PlanName string `json:"plan_name,omitempty"`
@@ -291,6 +310,66 @@ func applyResult(account accountRecord, result accountRead, now time.Time) *acco
 			next.DayStartConsumed = next.Consumed
 			next.DayStartAvailable = next.Available
 		}
+		// ---- 血槽（workbuddy 2026.10.25.1 逐字对齐）----
+		// 1) 底血：昨日收盘（昨天最后一次 OK 读数）。日期翻篇时，先把刚结束的
+		//    那一天的最后一次读数封存为昨收盘——实现上等价于：当 dayKey 与
+		//    PrevCloseDay 不同且 DayKey 已是昨天时，把旧快照的 Available 封存。
+		//    cache.go 是唯一写者，翻篇窗口只在第一次 OK 读数那一刻，此时旧
+		//    DayKey（=昨天）下的 Available 就是昨收盘。
+		if next.PrevCloseDay != "" && next.PrevCloseDay != dayKey {
+			// PrevCloseDay 已是过去日且其值已封存，不动。
+		}
+		if previous != nil && previous.DayKey != "" && previous.DayKey != dayKey && previous.HasNumbers {
+			// 今天是新的本地日：昨天的最后一次读数就是收盘。
+			next.PrevCloseDay = previous.DayKey
+			next.PrevCloseAvailable = previous.Available
+		}
+		// 2) 黄段 buff：三条证据取 max，不相加（防双计守卫逐条照抄 workbuddy）。
+		next.LoginGrantToday = result.LoginGrantToday
+		base := next.PrevCloseAvailable
+		source := "unknown"
+		var buff float64
+		if next.PrevCloseDay == previousDayOf(now) && base > 0 {
+			// 权威路径：底血确实是昨天结转。
+			source = "yesterday_close"
+			// 证据 B：昨收至今差额（今天首读早于发放时它已含发放；首读晚于发放时
+			// 首读基线里已含，这条会变小——所以三条取 max）。
+			delta := next.Available - base
+			if delta < 0 {
+				// 周期滚动或夜间耗损把余额拉低了：夜间净进账按 0 算。
+				delta = 0
+			}
+			// 证据 L：台账面额——只在 yesterday_close 时允许（B 是昨天收盘 ⇒ B 里
+			// 不可能有今天的签到分，L 与 B 不重叠，取 max 不会双计）。
+			buff = delta
+			if result.LoginGrantToday > buff {
+				buff = result.LoginGrantToday
+			}
+		} else if next.DayStartAvailable > 0 {
+			// 降级：没有昨收盘（新号/昨天没读到）。底血退到今日首读，明说不是结转。
+			// 此时黄段不许叠台账面额：首读里已经含着凌晨发放的分（发放先于首读时），
+			// 再加台账会把同一笔算两遍（总血量虚高）。此时黄段=首读之后的净上涨。
+			source = "today_first"
+			base = next.DayStartAvailable
+			buff = next.Available - next.DayStartAvailable
+			if buff < 0 {
+				buff = 0
+			}
+		}
+		// 证据 C：此刻比底血多出来的血。余额可以在两次读数之间上涨（上游发放、
+		// 官方客户端代领）。不把它算进黄段就会出现「剩余>总血量」——血槽画不出
+		// 那么多血。today_first 同样适用：它的台账证据已是 0，不可能双计。
+		if source == "yesterday_close" || source == "today_first" {
+			if actual := next.Available - base; actual > buff {
+				buff = actual
+			}
+		}
+		if buff < 0 {
+			buff = 0
+		}
+		next.BuffToday = buff
+		next.BuffSource = source
+		_ = base
 	case outcomeDead:
 		// The key is gone: yesterday's number is not "stale", it is wrong.
 		next.HasNumbers = false
@@ -326,6 +405,13 @@ func derefFloat(v *float64) float64 {
 		return 0
 	}
 	return *v
+}
+
+// previousDayOf renders the local calendar day before now's, YYYY-MM-DD. The
+// blood bar's base-evidence gate compares PrevCloseDay against it: a stored
+// close counts as YESTERDAY's close only when its day key is exactly this.
+func previousDayOf(now time.Time) string {
+	return now.AddDate(0, 0, -1).Format("2006-01-02")
 }
 
 // cacheEntriesSnapshot returns a copy of all entries.
@@ -550,6 +636,17 @@ type accountView struct {
 	TodayUsed *float64 `json:"today_used,omitempty"`
 	TodayGain *float64 `json:"today_gain,omitempty"`
 
+	// 血槽（workbuddy 2026.10.25.1 逐号语义，2026-11-22 对齐）：面板按这三段画
+	// 游戏血条。BaseHP=底血（昨天收盘剩余）；BuffToday=黄段（今天进账，三条证据
+	// 取 max，已在 applyResult 落盘）；TotalHP=总血量；DamageTaken=右端缺口
+	// （总血量−此刻剩余，含夜间耗损）。恒等式 TotalHP − DamageTaken = Available。
+	// BaseSource ∈ yesterday_close / today_first / unknown，面板据此说明降级。
+	BaseHP      *float64 `json:"base_hp,omitempty"`
+	BuffToday   *float64 `json:"buff_today,omitempty"`
+	TotalHP     *float64 `json:"total_hp,omitempty"`
+	DamageTaken *float64 `json:"damage_taken,omitempty"`
+	BaseSource  string   `json:"base_source,omitempty"`
+
 	// DailyLogin is the state of today's 2,000-point login reward for this
 	// account: the outcome (granted / already / failed / needs_login), how many
 	// points arrived and when the batch became effective.
@@ -574,16 +671,31 @@ type meooSummary struct {
 	// 今日口径聚合（workbuddy 汇总卡同构）：TodayRemain = 有基线的号的此刻余额之和，
 	// TodayUsed = 有基线的号的今日已用之和；TodayTotal = TodayRemain + TodayUsed。
 	// 覆盖数与总数分开报，覆盖不全时面板明说（未知不按 0 计）。
-	TodayValid      int      `json:"today_valid"`
-	TodayRemain     *float64 `json:"today_remain"`
-	TodayUsed       *float64 `json:"today_used"`
-	TodayTotal      *float64 `json:"today_total"`
-	TodayGain       *float64 `json:"today_gain"`
-	RefreshedCount  int      `json:"refreshed_count"`
-	RefreshMinutes  int      `json:"refresh_minutes"`
-	ServedFromCache bool     `json:"served_from_cache"`
-	LastAttemptAt   *string  `json:"last_attempt_at"`
-	Notes           []string `json:"notes"`
+	TodayValid  int      `json:"today_valid"`
+	TodayRemain *float64 `json:"today_remain"`
+	TodayUsed   *float64 `json:"today_used"`
+	TodayTotal  *float64 `json:"today_total"`
+	TodayGain   *float64 `json:"today_gain"`
+	// 血槽聚合（workbuddy 汇总条三段的数据源）：Base=底血和（昨天收盘），
+	// Buff=黄段和（今天进账），Total=总血量和，Damage=右端缺口和，Remain=此刻剩余和。
+	// 恒等式 Total − Damage = Remain。TodayFirst>0 时面板说明降级成因。
+	Blood           *meooBloodAgg `json:"blood,omitempty"`
+	RefreshedCount  int           `json:"refreshed_count"`
+	RefreshMinutes  int           `json:"refresh_minutes"`
+	ServedFromCache bool          `json:"served_from_cache"`
+	LastAttemptAt   *string       `json:"last_attempt_at"`
+	Notes           []string      `json:"notes"`
+}
+
+// meooBloodAgg is the summary blood-bar row (workbuddy bloodAggFor 同构).
+type meooBloodAgg struct {
+	Base       float64 `json:"base"`
+	Buff       float64 `json:"buff"`
+	Total      float64 `json:"total"`
+	Damage     float64 `json:"damage"`
+	Remain     float64 `json:"remain"`
+	Rows       int     `json:"rows"`
+	TodayFirst int     `json:"today_first"`
 }
 
 // buildView sweeps what the TTL says is due and then assembles the payload.
@@ -615,6 +727,11 @@ func assembleView(refreshed int) map[string]any {
 	}
 	var totalAvailable, totalGranted, totalConsumed, totalExpired float64
 	var todayUsedAgg, todayRemainAgg, todayGainAgg float64
+	// 血槽聚合（workbuddy 同构）：面板汇总条的三段就是这些和。
+	var bloodAgg struct {
+		base, buff, total, damage, remain float64
+		rows, todayFirst                  int
+	}
 	var lastAttempt time.Time
 	missingProjectAK := 0
 	for _, account := range accounts {
@@ -686,6 +803,35 @@ func assembleView(refreshed int) map[string]any {
 						todayGainAgg += gain
 					}
 				}
+				// 血槽三段（workbuddy 逐号语义）：缺口 = 总血量 − 此刻剩余，由
+				// applyResult 的构造恒 ≥ 0；这里仍防御性 clamp 并注明（负缺口在
+				// 面板上没有意义，但不能悄悄变成"凭空多出的血"）。
+				if snapshot.BuffSource == "yesterday_close" || snapshot.BuffSource == "today_first" {
+					base := snapshot.PrevCloseAvailable
+					if snapshot.BuffSource == "today_first" {
+						base = snapshot.DayStartAvailable
+					}
+					total := base + snapshot.BuffToday
+					damage := total - available
+					if damage < 0 {
+						damage = 0
+					}
+					view.BaseHP = &base
+					buff := snapshot.BuffToday
+					view.BuffToday = &buff
+					view.TotalHP = &total
+					view.DamageTaken = &damage
+					view.BaseSource = snapshot.BuffSource
+					bloodAgg.base += base
+					bloodAgg.buff += snapshot.BuffToday
+					bloodAgg.total += total
+					bloodAgg.damage += damage
+					bloodAgg.remain += available
+					bloodAgg.rows++
+					if snapshot.BuffSource == "today_first" {
+						bloodAgg.todayFirst++
+					}
+				}
 			}
 			if snapshot.Outcome == outcomeDead {
 				summary.Dead++
@@ -732,6 +878,15 @@ func assembleView(refreshed int) map[string]any {
 		}
 	}
 	summary.LastAttemptAt = nowPtr(lastAttempt)
+	// 血槽聚合下发（workbuddy 汇总条三段数据源）。rows>0 即画血槽——它不依赖
+	// 「今日已用」基线（缺口来自减法恒等式），这是 workbuddy 的原设计。
+	if bloodAgg.rows > 0 {
+		summary.Blood = &meooBloodAgg{
+			Base: bloodAgg.base, Buff: bloodAgg.buff, Total: bloodAgg.total,
+			Damage: bloodAgg.damage, Remain: bloodAgg.remain,
+			Rows: bloodAgg.rows, TodayFirst: bloodAgg.todayFirst,
+		}
+	}
 	if errAccounts != nil {
 		summary.Notes = append(summary.Notes, "账号存储读取失败："+note(errAccounts.Error()))
 	}

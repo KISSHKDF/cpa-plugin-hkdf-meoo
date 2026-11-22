@@ -420,6 +420,13 @@ type pointsReading struct {
 	Consumed  *float64 `json:"totalConsumed"`
 	Expired   *float64 `json:"totalExpired"`
 	Refunded  *float64 `json:"totalRefunded"`
+	// LoginGrantToday is the face value of TODAY's「登录赠送积分」batches in
+	// activeGrants (sum). It is upstream FACT — the same role workbuddy's
+	// checkin-ledger face value plays in its blood bar — and it is the only
+	// buff evidence that survives a claim that landed BEFORE today's first
+	// reading (2026-11-22 operator ruling: the day boundary is midnight, not
+	// the panel's first read).
+	LoginGrantToday float64 `json:"-"`
 }
 
 // fetchPoints reads the ledger. Absent numbers stay nil — never 0.
@@ -429,10 +436,36 @@ func fetchPoints(userKey string) (*pointsReading, error) {
 		return nil, errCall
 	}
 	var envelope struct {
-		Account pointsReading `json:"account"`
+		Account      pointsReading `json:"account"`
+		ActiveGrants []struct {
+			SourceType     string `json:"sourceType"`
+			SourceTypeName string `json:"sourceTypeName"`
+			GrantDetails   []struct {
+				RemainingAmount float64 `json:"remainingAmount"`
+				EffectiveDate   string  `json:"effectiveDate"`
+				ExpiresDate     string  `json:"expiresDate"`
+			} `json:"grantDetails"`
+		} `json:"activeGrants"`
 	}
 	if errJSON := json.Unmarshal(payload, &envelope); errJSON != nil {
 		return nil, fmt.Errorf("points: %s", note(errJSON.Error()))
+	}
+	// Sum the face value of today's login-grant batches. effectiveDate is a
+	// Beijing-time instant; the day compare uses the same local YYYY-MM-DD the
+	// day baselines use (the operator's ruling: the day is the calendar day).
+	envelope.Account.LoginGrantToday = 0
+	today := time.Now().Format("2006-01-02")
+	for _, grant := range envelope.ActiveGrants {
+		if !strings.Contains(strings.TrimSpace(grant.SourceTypeName), "登录") &&
+			!strings.Contains(strings.TrimSpace(grant.SourceType), "LOGIN") {
+			continue
+		}
+		for _, detail := range grant.GrantDetails {
+			if strings.TrimSpace(detail.EffectiveDate) == today ||
+				strings.HasPrefix(strings.TrimSpace(detail.EffectiveDate), today) {
+				envelope.Account.LoginGrantToday += detail.RemainingAmount
+			}
+		}
 	}
 	return &envelope.Account, nil
 }
@@ -927,6 +960,10 @@ type accountRead struct {
 	Frozen    *float64
 	Expired   *float64
 
+	// LoginGrantToday is the face value of today's「登录赠送积分」batches the
+	// ledger reports (upstream fact; the blood bar's ledger-evidence buff).
+	LoginGrantToday float64
+
 	ProjectURLID string
 	ProjectName  string
 	ProjectAK    string
@@ -972,6 +1009,7 @@ func readAccount(record accountRecord) accountRead {
 		read.Consumed = points.Consumed
 		read.Frozen = points.Frozen
 		read.Expired = points.Expired
+		read.LoginGrantToday = points.LoginGrantToday
 	}
 
 	entitlement, errEntitlement := fetchEntitlement(record.UserKey)
