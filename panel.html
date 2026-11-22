@@ -715,14 +715,15 @@ function card(a){
       + '</div>';
   }
   var akState = String(a.project_ak_state||'');
-  var akTail = esc(String(a.project_ak_tail||'').trim());
-  /* AK 行 = 用户唯一关心的语义：这条反代通道现在能不能用。key 尾号只用于身份
-     辨认（面板永不显示完整密钥）；项目名/url_id 是上游的内部组织，用户不关心，
-     2026-11-22 主人裁定从卡面删除（数据仍在 /accounts payload 里，悬停可查）。 */
-  var akBadge = akTail
-    ? '<span class="cd-pill ok" title="项目级 AK（模型网关的钥匙）已就位，尾号 '+akTail+'。反代通道可用。">反代可用</span>'
-    : '<span class="cd-pill dead" title="这个账号还没有项目级 AK：模型网关（反代）通道没有凭据可用。点「刷新数据」重走发现链，或先在秒悟账号下建好项目与云服务。">网关无凭据</span>';
-  var note = a.note ? '<div class="cd-msg'+((dead||stale)?' err':'')+'" title="'+esc(a.note)+'">'+esc(a.note)+'</div>' : '';  /* 每日登录赠送积分（2,000/天）：状态来自后端，每行都带 —— 没领到也要看得见。 */
+  /* 反代状态只在「出事」时占一行：网关无凭据（AK 缺失）才渲染。可用是常态，
+     常态不说话（2026-11-22 主人裁定：卡面只留异常与数字，废话全删）。两类尾号
+     不再出现在卡面——尾号只服务于身份辨认，出问题时在悬停与 /accounts
+     payload 里仍然可查（数据未删，只删展示）。 */
+  var akBadge = akState==='ok' ? '' : '<div class="cd-msg err">反代通道没有凭据（项目级 AK 缺失）：点「刷新数据」重走发现链，或先在秒悟账号下建好项目与云服务。</div>';
+  var note = a.note ? '<div class="cd-msg'+((dead||stale)?' err':'')+'" title="'+esc(a.note)+'">'+esc(a.note)+'</div>' : '';
+  /* 每日登录赠送积分（2,000/天）：状态只在右上角徽章出现。领到是常态，常态不说话——
+     徽章下方的说明行（"已领取 2000 积分"等）已于 2026-11-22 主人裁定删除；只有
+     failed / needs_login 这两种真异常才进卡面（与 note 同一条通道）。 */
   var dl = a.daily_login || {};
   var dlOutcome = String(dl.outcome||'');
   var dlPill = dlOutcome==='granted' ? '<span class="cd-pill ok" title="'+esc(String(dl.note||'今日已领取'))+'">今日 +'+fmtNum(dl.granted_amount||2000)+'</span>'
@@ -738,7 +739,6 @@ function card(a){
             : sesDays < 0 ? '<span class="cd-pill dead" title="会话已于 '+esc(ses.expires_at)+' 过期，重新登录即可续上">会话过期</span>'
             : sesDays < 7 ? '<span class="cd-pill stale" title="'+esc(ses.hint||'')+'">剩 '+sesDays+' 天</span>'
             : '<span class="cd-pill" title="'+esc(ses.hint||'')+'">会话 '+sesDays+' 天</span>';
-  var dlNote = dl.note ? '<div class="cd-msg'+(dlOutcome==='failed'||dlOutcome==='needs_login'?' err':'')+'" title="'+esc(dl.note)+'">'+esc(dl.note)+'</div>' : '';
   /* 账号名（结构照 workbuddy）：label 优先、身份名兜底；identity 徽章只在两者不同且都有值时出现。 */
   var name = rowName(a);
 
@@ -783,12 +783,8 @@ function card(a){
     +   '</span>'
     + '</div>'
     + bar
-    + '<div class="cd-meta" style="margin-top:8px">'
-    +   '<div class="cd-mi"><span class="cd-lbl">反代</span>'+akBadge+'</div>'
-    +   '<div class="cd-mi right"><span class="cd-lbl">key 尾号</span><span class="cd-val">'+esc(textOr(a.key_tail))+'</span></div>'
-    + '</div>'
-    + dlNote
-    + note
+    + akBadge
+    + ((dead||stale) ? note : '')
     + '</div>';
 }
 

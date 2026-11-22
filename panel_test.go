@@ -204,10 +204,13 @@ func TestPanelReadsHostManagementKey(t *testing.T) {
 func TestPanelNeverReadsFullCredentials(t *testing.T) {
 	html := string(panelHTML)
 
-	// The tails the API publishes, and the label the operator reads them by.
-	for _, needle := range []string{"a.key_tail", "a.project_ak_tail", "key 尾号"} {
-		if !strings.Contains(html, needle) {
-			t.Errorf("panel must show the published tail (%q is missing)", needle)
+	// The tails the API publishes stay LEGITIMATE to read (hover/JS may use them);
+	// since 2026.11.22.5 the card face prints none of them (operator ruling: the
+	// card carries numbers and anomalies only). Assert the *absence* of the
+	// on-card tail labels while keeping the never-full-credential direction.
+	for _, forbidden := range []string{"key 尾号", "AK 尾号", "项目级 AK</span>"} {
+		if strings.Contains(html, forbidden) {
+			t.Errorf("the card face prints %q — tails are identity aids, not card content (2026-11-22 operator ruling)", forbidden)
 		}
 	}
 
