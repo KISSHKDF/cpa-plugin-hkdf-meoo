@@ -88,7 +88,7 @@ type managementRegistrationResponse struct {
 //
 // PATHS ARE RELATIVE TO THE MANAGEMENT ROOT, not to the plugin's own base: the
 // host injects BasePath = "/v0/management", so a route is declared as
-// "/plugins/meoo/accounts" and the host prefixes it.
+// "/plugins/hkdf-meoo/accounts" and the host prefixes it.
 //
 // `/quota` is a host-reserved path and is deliberately unused here.
 func managementRegistration() managementRegistrationResponse {
@@ -118,8 +118,8 @@ func managementRegistration() managementRegistrationResponse {
 //
 // The host hands us the FULL request path, and it arrives through TWO doors:
 //
-//	/v0/management/plugins/meoo/accounts   (and every other /v<n>/ door)
-//	/v0/resource/plugins/meoo/panel        (the browser-facing card)
+//	/v0/management/plugins/hkdf-meoo/accounts   (and every other /v<n>/ door)
+//	/v0/resource/plugins/hkdf-meoo/panel        (the browser-facing card)
 //
 // Both must land on the same tail, or the panel loads and every button 404s.
 func managementTail(rawPath string) string {

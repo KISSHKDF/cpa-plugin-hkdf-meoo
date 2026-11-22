@@ -28,13 +28,13 @@ import (
 // operator judged them redundant.)
 func TestPanelHTMLContract(t *testing.T) {
 	required := []string{
-		"刷新数据",             // the explicit action
-		"模型",               // GET /models
-		"加账号",              // POST /accounts/add
-		"POLL_MS = 300000", // 5-minute panel poll (cache-first, so zero upstream)
-		"/plugins/meoo",    // the only management surface it talks to
-		"document.hidden",  // hidden tabs must not poll
-		"Bearer",           // the management key travels in the standard header
+		"刷新数据",               // the explicit action
+		"模型",                 // GET /models
+		"加账号",                // POST /accounts/add
+		"POLL_MS = 300000",   // 5-minute panel poll (cache-first, so zero upstream)
+		"/plugins/hkdf-meoo", // the only management surface it talks to
+		"document.hidden",    // hidden tabs must not poll
+		"Bearer",             // the management key travels in the standard header
 		// every verb of the agreed route table (§5) must actually be called:
 		"/accounts/add",
 		"/accounts/remove",

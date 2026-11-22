@@ -291,10 +291,10 @@ table.ut td.num{text-align:right;font-variant-numeric:tabular-nums}
 <div class="toasts" id="toasts"></div>
 <script>
 /* 走哪扇门：从本页面被访问的 URL 反推。v8 同时挂着 /v0/management 与
-   /v8/management，而资源路由形如 <door>/resource/plugins/meoo/panel —— 我们是被
+   /v8/management，而资源路由形如 <door>/resource/plugins/hkdf-meoo/panel —— 我们是被
    哪扇门送进来的，就用那扇门调管理 API；形状意外时回落到 /v0。 */
 var DOOR = (function(){ var m = (location.pathname||"").match(/^(\/v\d+)\/resource\/plugins\//); return m ? m[1] : "/v0"; })();
-var API = DOOR + "/management", BASE = "/plugins/meoo";
+var API = DOOR + "/management", BASE = "/plugins/hkdf-meoo";
 var SS_KEY = "cpa-meoo-mgmt-key", POLL_MS = 300000, POLL_KEY = "cpa-meoo-autopoll";
 var pollTimer = null, pollBusy = false, authFailUntil = 0, authFailCount = 0;
 var lastPayload = null, currentFilter = "all", hostKeyRejected = false, pendingRemoveId = "";
@@ -498,7 +498,7 @@ function isCpaEntryGroup(group){
 function loadCpaKeys(){
   if(CPA.checked) return Promise.resolve(CPA);
   /* api() already prepends DOOR + "/management"; this path is the host's own config
-     tree, NOT this plugin's base (BASE = /plugins/meoo), so it must not carry BASE.
+     tree, NOT this plugin's base (BASE = /plugins/hkdf-meoo), so it must not carry BASE.
      2026.11.21.8: the host mounts the openai-compatibility config tree on the /v8
      door (GET /v8/management/config/api-keys/openai-compatibility); the /v0 door
      answers 404 — measured. The old single-door call therefore 404'd forever and

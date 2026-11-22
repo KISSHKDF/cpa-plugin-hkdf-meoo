@@ -113,7 +113,10 @@ import (
 // providerName is the host-facing plugin id. It is ALSO the plugin id used in
 // every route and in plugins.configs.<id>, which is why it is a constant and not
 // a build-time variable: the routes are string literals in the gate's view.
-const providerName = "meoo"
+// 2026.11.22.2: renamed meoo -> hkdf-meoo for the public store (id uniqueness:
+// the 127-entry official registry had no collision for hkdf-meoo; the hkdf-
+// prefix is the 2026-11-22 operator decision for every public-facing id).
+const providerName = "hkdf-meoo"
 
 // pluginLogoURL is declared in logo.go together with its provenance.
 
@@ -133,7 +136,12 @@ const providerName = "meoo"
 //	clampProjectName 同样改为按码点切（64 字节上限不变，不再把半个汉字 POST 给上游）。
 //	2026.11.22.1: 首次公开发布准备。树内所有本机私有路径/用户名清零（文档改通用表述、
 //	build 脚本 gcc 改 CC/PATH 探测），LICENSE 署名改公开 GitHub 身份。行为零变化。
-var version = "2026.11.22.1"
+//	2026.11.22.2: 插件 id 改名 meoo -> hkdf-meoo（对外发布 id 方案，2026-11-22 主人裁定）。
+//	路由/配置键/面板 BASE/树目录/构建产物名全部跟随；上游域名 meoo.com 与凭据格式
+//	meoo_ak_*/meoo_project_service_v1.* 是上游服务的名字，不属于本插件 id，保持不动；
+//	数据目录 %USERPROFILE%\.meoo-cpa 指向的是秒悟服务的数据，一并保持（迁数据有弄丢
+//	已登录会话的风险，且该目录名不参与 id 契约）。
+var version = "2026.11.22.2"
 
 var hostAPI *C.cliproxy_host_api
 

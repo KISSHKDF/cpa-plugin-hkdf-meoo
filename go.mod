@@ -1,4 +1,4 @@
-module xzy/meoo
+module xzy/hkdf-meoo
 
 go 1.26.10
 

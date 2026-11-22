@@ -61,7 +61,7 @@ func TestManagementRegistrationMirrorsUseLowercaseTags(t *testing.T) {
 		t.Fatalf("marshal registration: %v", errMarshal)
 	}
 	encoded := string(raw)
-	for _, needle := range []string{`"method":"GET"`, `"method":"POST"`, `"path":"/plugins/meoo/`, `"menu":"Meoo 秒悟"`} {
+	for _, needle := range []string{`"method":"GET"`, `"method":"POST"`, `"path":"/plugins/hkdf-meoo/`, `"menu":"Meoo 秒悟"`} {
 		if !strings.Contains(encoded, needle) {
 			t.Errorf("registration JSON is missing %s: %s", needle, encoded)
 		}
@@ -83,17 +83,17 @@ func TestManagementRoutesAreExactlyTheAgreedSurface(t *testing.T) {
 		got = append(got, route.Method+" "+route.Path)
 	}
 	want := []string{
-		"GET /plugins/meoo/accounts",
-		"POST /plugins/meoo/refresh",
-		"POST /plugins/meoo/accounts/add",
-		"POST /plugins/meoo/accounts/remove",
-		"GET /plugins/meoo/models",
-		"POST /plugins/meoo/models/refresh",
-		"POST /plugins/meoo/daily-login",
-		"GET /plugins/meoo/daily-login",
-		"POST /plugins/meoo/daily-login/session",
-		"DELETE /plugins/meoo/daily-login/session",
-		"POST /plugins/meoo/daily-login/login-window",
+		"GET /plugins/hkdf-meoo/accounts",
+		"POST /plugins/hkdf-meoo/refresh",
+		"POST /plugins/hkdf-meoo/accounts/add",
+		"POST /plugins/hkdf-meoo/accounts/remove",
+		"GET /plugins/hkdf-meoo/models",
+		"POST /plugins/hkdf-meoo/models/refresh",
+		"POST /plugins/hkdf-meoo/daily-login",
+		"GET /plugins/hkdf-meoo/daily-login",
+		"POST /plugins/hkdf-meoo/daily-login/session",
+		"DELETE /plugins/hkdf-meoo/daily-login/session",
+		"POST /plugins/hkdf-meoo/daily-login/login-window",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("route surface drifted:\n got %v\nwant %v", got, want)
@@ -136,14 +136,14 @@ func TestEveryDeclaredRouteIsDispatched(t *testing.T) {
 // browser shows the source instead of the panel.
 //
 // It also covers the second door: the browser's card request arrives on
-// /v0/resource/plugins/meoo/panel, not on the management base.
+// /v0/resource/plugins/hkdf-meoo/panel, not on the management base.
 func TestPanelResourceServesRawHTML(t *testing.T) {
 	isolateMeoo(t)
 
 	for _, door := range []string{
-		"/v0/resource/plugins/meoo/panel",
-		"/v8/resource/plugins/meoo/panel",
-		"/v0/management/plugins/meoo/panel",
+		"/v0/resource/plugins/hkdf-meoo/panel",
+		"/v8/resource/plugins/hkdf-meoo/panel",
+		"/v0/management/plugins/hkdf-meoo/panel",
 	} {
 		resp := callRoute(t, "GET", door, nil)
 		if resp.StatusCode != http.StatusOK {
@@ -168,7 +168,7 @@ func TestPanelResourceServesRawHTML(t *testing.T) {
 
 	// An unknown sub-path on the resource door is the panel's own 404 page, with
 	// the requested path escaped rather than interpolated raw.
-	resp := callRoute(t, "GET", "/v0/resource/plugins/meoo/<b>nope</b>", nil)
+	resp := callRoute(t, "GET", "/v0/resource/plugins/hkdf-meoo/<b>nope</b>", nil)
 	if !strings.Contains(string(resp.Body), "未知面板路径") {
 		t.Fatalf("an unknown panel sub-path must say so: %s", truncate(string(resp.Body), 160))
 	}
@@ -180,7 +180,7 @@ func TestPanelResourceServesRawHTML(t *testing.T) {
 	}
 
 	// An unknown MANAGEMENT path still answers JSON, so a typo is diagnosable.
-	typo := callRoute(t, "GET", "/v0/management/plugins/meoo/not-a-route", nil)
+	typo := callRoute(t, "GET", "/v0/management/plugins/hkdf-meoo/not-a-route", nil)
 	if typo.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown management route status = %d, want 404", typo.StatusCode)
 	}
@@ -189,7 +189,7 @@ func TestPanelResourceServesRawHTML(t *testing.T) {
 // TestUnknownRouteAnswers404NotSilence keeps a typo diagnosable.
 func TestUnknownRouteAnswers404NotSilence(t *testing.T) {
 	isolateMeoo(t)
-	resp := callRoute(t, "GET", "/v0/management/plugins/meoo/nope", nil)
+	resp := callRoute(t, "GET", "/v0/management/plugins/hkdf-meoo/nope", nil)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown route status = %d, want 404", resp.StatusCode)
 	}
@@ -203,7 +203,7 @@ func TestUnknownRouteAnswers404NotSilence(t *testing.T) {
 func TestUnifiedPayloadShapeFromRefresh(t *testing.T) {
 	isolateMeoo(t)
 
-	resp := callRoute(t, "POST", "/v0/management/plugins/meoo/refresh", nil)
+	resp := callRoute(t, "POST", "/v0/management/plugins/hkdf-meoo/refresh", nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("refresh status = %d, want 200", resp.StatusCode)
 	}
@@ -224,7 +224,7 @@ func TestUnifiedPayloadShapeFromRefresh(t *testing.T) {
 	}
 
 	// /accounts answers the same shape as /refresh (cache-first).
-	accounts := callRoute(t, "GET", "/v0/management/plugins/meoo/accounts", nil)
+	accounts := callRoute(t, "GET", "/v0/management/plugins/hkdf-meoo/accounts", nil)
 	if !strings.Contains(string(accounts.Body), `"summary"`) {
 		t.Fatalf("/accounts does not answer the unified shape: %s", string(accounts.Body))
 	}
@@ -239,7 +239,7 @@ func TestAddAccountThroughManagementNeverEchoesTheKey(t *testing.T) {
 	if errMarshal != nil {
 		t.Fatalf("marshal body: %v", errMarshal)
 	}
-	resp := callRoute(t, "POST", "/v0/management/plugins/meoo/accounts/add", body)
+	resp := callRoute(t, "POST", "/v0/management/plugins/hkdf-meoo/accounts/add", body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("add status = %d: %s", resp.StatusCode, string(resp.Body))
 	}
@@ -255,7 +255,7 @@ func TestAddAccountThroughManagementNeverEchoesTheKey(t *testing.T) {
 	}
 
 	// And the ordinary read is clean too — with the key in place this time.
-	accounts := callRoute(t, "GET", "/v0/management/plugins/meoo/accounts", nil)
+	accounts := callRoute(t, "GET", "/v0/management/plugins/hkdf-meoo/accounts", nil)
 	if strings.Contains(string(accounts.Body), fakeUserKey) {
 		t.Fatal("the accounts payload echoed the full key")
 	}
@@ -295,7 +295,7 @@ func TestAddAccountRejectionStillAnswersTheUnifiedShape(t *testing.T) {
 	isolateMeoo(t)
 
 	body, _ := json.Marshal(map[string]string{"user_key": fakeProjectAK})
-	resp := callRoute(t, "POST", "/v0/management/plugins/meoo/accounts/add", body)
+	resp := callRoute(t, "POST", "/v0/management/plugins/hkdf-meoo/accounts/add", body)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
@@ -308,7 +308,7 @@ func TestAddAccountRejectionStillAnswersTheUnifiedShape(t *testing.T) {
 	}
 
 	// A missing body is a 400 too, not a panic.
-	empty := callRoute(t, "POST", "/v0/management/plugins/meoo/accounts/add", nil)
+	empty := callRoute(t, "POST", "/v0/management/plugins/hkdf-meoo/accounts/add", nil)
 	if empty.StatusCode != http.StatusBadRequest {
 		t.Fatalf("an empty add = %d, want 400", empty.StatusCode)
 	}
@@ -323,7 +323,7 @@ func TestRemoveAccountThroughManagement(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(map[string]string{"id": record.ID})
-	resp := callRoute(t, "POST", "/v0/management/plugins/meoo/accounts/remove", body)
+	resp := callRoute(t, "POST", "/v0/management/plugins/hkdf-meoo/accounts/remove", body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("remove status = %d", resp.StatusCode)
 	}
@@ -333,7 +333,7 @@ func TestRemoveAccountThroughManagement(t *testing.T) {
 	}
 
 	// Removing it again reports removed=false with a reason, still unified.
-	again := callRoute(t, "POST", "/v0/management/plugins/meoo/accounts/remove", body)
+	again := callRoute(t, "POST", "/v0/management/plugins/hkdf-meoo/accounts/remove", body)
 	if !strings.Contains(string(again.Body), `"removed":false`) {
 		t.Fatalf("second remove = %s", string(again.Body))
 	}
@@ -342,7 +342,7 @@ func TestRemoveAccountThroughManagement(t *testing.T) {
 	}
 
 	// No id at all is a 400.
-	noID := callRoute(t, "POST", "/v0/management/plugins/meoo/accounts/remove", []byte(`{}`))
+	noID := callRoute(t, "POST", "/v0/management/plugins/hkdf-meoo/accounts/remove", []byte(`{}`))
 	if noID.StatusCode != http.StatusBadRequest {
 		t.Fatalf("remove without an id = %d, want 400", noID.StatusCode)
 	}
@@ -368,7 +368,7 @@ func TestModelsRouteMarksTheTokenPlanOnlyModelUnusable(t *testing.T) {
 	})
 	swapGateway(t, server)
 
-	resp := callRoute(t, "GET", "/v0/management/plugins/meoo/models", nil)
+	resp := callRoute(t, "GET", "/v0/management/plugins/hkdf-meoo/models", nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("models status = %d: %s", resp.StatusCode, string(resp.Body))
 	}
@@ -403,7 +403,7 @@ func TestModelsRouteMarksTheTokenPlanOnlyModelUnusable(t *testing.T) {
 	}
 
 	// The catalogue is cached behind the same TTL: a second call must not re-ask.
-	callRoute(t, "GET", "/v0/management/plugins/meoo/models", nil)
+	callRoute(t, "GET", "/v0/management/plugins/hkdf-meoo/models", nil)
 	if gatewayHits != 1 {
 		t.Fatalf("gateway hits = %d, want 1 (the catalogue must be cached)", gatewayHits)
 	}
@@ -413,7 +413,7 @@ func TestModelsRouteMarksTheTokenPlanOnlyModelUnusable(t *testing.T) {
 // with the reason, not with silence.
 func TestModelsRouteWithoutAnyProjectKeyExplainsItself(t *testing.T) {
 	isolateMeoo(t)
-	resp := callRoute(t, "GET", "/v0/management/plugins/meoo/models", nil)
+	resp := callRoute(t, "GET", "/v0/management/plugins/hkdf-meoo/models", nil)
 	payload := payloadMap(t, resp)
 	models, okModels := payload["models"].([]any)
 	if !okModels || len(models) != 0 {
@@ -434,21 +434,21 @@ func TestManagementBasePathsHaveSafeDefaults(t *testing.T) {
 	isolateMeoo(t)
 	setManagementBasePath("")
 	setResourceBasePath("")
-	if got := loadedManagementBasePath(); got != "/v0/management/plugins/meoo" {
+	if got := loadedManagementBasePath(); got != "/v0/management/plugins/hkdf-meoo" {
 		t.Fatalf("default management base = %q", got)
 	}
-	if got := loadedResourceBasePath(); got != "/v0/resource/plugins/meoo" {
+	if got := loadedResourceBasePath(); got != "/v0/resource/plugins/hkdf-meoo" {
 		t.Fatalf("default resource base = %q", got)
 	}
-	applyManagementRegistration([]byte(`{"base_path":"/v0/management","resource_base_path":"/v0/resource/plugins/meoo"}`))
+	applyManagementRegistration([]byte(`{"base_path":"/v0/management","resource_base_path":"/v0/resource/plugins/hkdf-meoo"}`))
 	if got := loadedManagementBasePath(); got != "/v0/management" {
 		t.Fatalf("base path not applied: %q", got)
 	}
-	if got := loadedResourceBasePath(); got != "/v0/resource/plugins/meoo" {
+	if got := loadedResourceBasePath(); got != "/v0/resource/plugins/hkdf-meoo" {
 		t.Fatalf("resource base path not applied: %q", got)
 	}
 	// The camelCase spelling the host has also shipped.
-	applyManagementRegistration([]byte(`{"basePath":"/v0/management/","resourceBasePath":"/v0/resource/plugins/meoo/"}`))
+	applyManagementRegistration([]byte(`{"basePath":"/v0/management/","resourceBasePath":"/v0/resource/plugins/hkdf-meoo/"}`))
 	if got := loadedManagementBasePath(); got != "/v0/management" {
 		t.Fatalf("camelCase base path not applied: %q", got)
 	}
@@ -464,13 +464,13 @@ func TestManagementBasePathsHaveSafeDefaults(t *testing.T) {
 // TestManagementTailHandlesBothDoors pins the prefix stripping directly.
 func TestManagementTailHandlesBothDoors(t *testing.T) {
 	cases := map[string]string{
-		"/v0/management/plugins/meoo/accounts":    "/accounts",
-		"/v0/management/plugins/meoo/accounts/":   "/accounts",
-		"/v8/management/plugins/meoo/daily-login": "/daily-login",
-		"/v0/resource/plugins/meoo/panel":         "/panel",
-		"/v0/management/plugins/meoo":             "/",
-		"/v0/management/plugins/meoo/":            "/",
-		"/weird/prefix/plugins/meoo/models":       "/models",
+		"/v0/management/plugins/hkdf-meoo/accounts":    "/accounts",
+		"/v0/management/plugins/hkdf-meoo/accounts/":   "/accounts",
+		"/v8/management/plugins/hkdf-meoo/daily-login": "/daily-login",
+		"/v0/resource/plugins/hkdf-meoo/panel":         "/panel",
+		"/v0/management/plugins/hkdf-meoo":             "/",
+		"/v0/management/plugins/hkdf-meoo/":            "/",
+		"/weird/prefix/plugins/hkdf-meoo/models":       "/models",
 	}
 	for input, want := range cases {
 		if got := managementTail(input); got != want {
@@ -530,7 +530,7 @@ func TestHandleMethodDispatch(t *testing.T) {
 		t.Fatalf("plugin.reconfigure: %v", errReconfigure)
 	}
 
-	registrationRaw, errRegister := handleMethod("management.register", []byte(`{"base_path":"/v0/management","resource_base_path":"/v0/resource/plugins/meoo"}`))
+	registrationRaw, errRegister := handleMethod("management.register", []byte(`{"base_path":"/v0/management","resource_base_path":"/v0/resource/plugins/hkdf-meoo"}`))
 	if errRegister != nil {
 		t.Fatalf("management.register: %v", errRegister)
 	}
@@ -538,7 +538,7 @@ func TestHandleMethodDispatch(t *testing.T) {
 		t.Fatalf("management.register answer = %s", string(registrationRaw))
 	}
 
-	handleRaw, errHandle := handleMethod("management.handle", []byte(`{"Method":"GET","Path":"/v0/management/plugins/meoo/models"}`))
+	handleRaw, errHandle := handleMethod("management.handle", []byte(`{"Method":"GET","Path":"/v0/management/plugins/hkdf-meoo/models"}`))
 	if errHandle != nil {
 		t.Fatalf("management.handle: %v", errHandle)
 	}

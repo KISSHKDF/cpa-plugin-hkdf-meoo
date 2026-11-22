@@ -1,9 +1,14 @@
-# meoo
+# hkdf-meoo
 
 CPA (CLIProxyAPI) plugin — a read-only 秒悟 (Meoo) panel: points, plan, the project
 each key owns, and the project-level AK the model gateway wants.
 
-**Current version**: `2026.11.22.1` (date-style `YYYY.MM.DD.N`)
+**Current version**: `2026.11.22.2` (date-style `YYYY.MM.DD.N`)
+
+> Plugin id is `hkdf-meoo` (2026-11-22): every public-facing CPA plugin id from this
+> author carries the `hkdf-` prefix, because the plain ids the host derives from DLL
+> filenames must be unique in the official plugin registry. The upstream service is
+> still Meoo (meoo.com); only this plugin's host-facing id changed.
 
 ## What it is
 
@@ -83,7 +88,7 @@ Set `daily_login: false` to stop the plugin from reading any browser profile.
 
 **When the browser route cannot reach the session** — Chromium holds its cookie
 store locked while it runs, so an open everyday browser may be unreadable — the
-operator can paste the session by hand (`POST /plugins/meoo/daily-login/session`,
+operator can paste the session by hand (`POST /plugins/hkdf-meoo/daily-login/session`,
 or the **粘会话** button on each card). The cookie is verified against the
 account's identity before it is stored and is never echoed back.
 
@@ -105,7 +110,7 @@ This tree has exactly one sanctioned build entry:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-ng.ps1
 ```
 
-or `make build`. The artifact lands in `build-out/meoo-<VERSION>-cshared.dll` and
+or `make build`. The artifact lands in `build-out/hkdf-meoo-<VERSION>-cshared.dll` and
 never in the source root. The script runs, in order: cgo guard → gofmt → panel JS
 check → panel style check → module pin check → go vet → go test →
 `go build -buildmode=c-shared` → contract gate (artifact present + version stamp
@@ -138,7 +143,7 @@ published artifact for external users is the GitHub Release of this repository.
 ```yaml
 plugins:
     configs:
-        meoo:
+        hkdf-meoo:
             refresh_minutes: 60      # 1..1440, cache TTL and background period
             auto_provision: true     # create a project / enable its cloud when missing
             project_name: CPA-Model-Gateway   # name used when one is created
@@ -152,19 +157,19 @@ declared config surface.
 
 | method | path | notes |
 |---|---|---|
-| GET | `/v0/management/plugins/meoo/accounts` | panel data, cache-first (zero upstream inside the window) |
-| POST | `/v0/management/plugins/meoo/refresh` | 刷新数据: full walk now |
-| POST | `/v0/management/plugins/meoo/accounts/add` | store one user-level key + optional label |
-| POST | `/v0/management/plugins/meoo/accounts/remove` | drop one row by id |
-| GET | `/v0/management/plugins/meoo/models` | gateway catalogue for the model picker, unusable models marked (cache-first) |
-| POST | `/v0/management/plugins/meoo/models/refresh` | 刷新目录: force a catalogue re-walk now |
-| POST | `/v0/management/plugins/meoo/daily-login` | 立即领取每日积分: attempt the daily 2,000-point reward (all accounts, or one named by `account_id`) |
-| GET | `/v0/management/plugins/meoo/daily-login` | the daily-reward state per account. Zero upstream calls |
-| POST | `/v0/management/plugins/meoo/daily-login/session` | store a pasted web-session cookie for one account; verified against that account's identity, never echoed |
-| DELETE | `/v0/management/plugins/meoo/daily-login/session` | drop the stored web-session cookie of one account |
-| POST | `/v0/management/plugins/meoo/daily-login/login-window` | open the account's own Edge login window at meoo.com (one click before a session expires) |
+| GET | `/v0/management/plugins/hkdf-meoo/accounts` | panel data, cache-first (zero upstream inside the window) |
+| POST | `/v0/management/plugins/hkdf-meoo/refresh` | 刷新数据: full walk now |
+| POST | `/v0/management/plugins/hkdf-meoo/accounts/add` | store one user-level key + optional label |
+| POST | `/v0/management/plugins/hkdf-meoo/accounts/remove` | drop one row by id |
+| GET | `/v0/management/plugins/hkdf-meoo/models` | gateway catalogue for the model picker, unusable models marked (cache-first) |
+| POST | `/v0/management/plugins/hkdf-meoo/models/refresh` | 刷新目录: force a catalogue re-walk now |
+| POST | `/v0/management/plugins/hkdf-meoo/daily-login` | 立即领取每日积分: attempt the daily 2,000-point reward (all accounts, or one named by `account_id`) |
+| GET | `/v0/management/plugins/hkdf-meoo/daily-login` | the daily-reward state per account. Zero upstream calls |
+| POST | `/v0/management/plugins/hkdf-meoo/daily-login/session` | store a pasted web-session cookie for one account; verified against that account's identity, never echoed |
+| DELETE | `/v0/management/plugins/hkdf-meoo/daily-login/session` | drop the stored web-session cookie of one account |
+| POST | `/v0/management/plugins/hkdf-meoo/daily-login/login-window` | open the account's own Edge login window at meoo.com (one click before a session expires) |
 
-Panel resource: `/v0/resource/plugins/meoo/panel`. Every account-facing verb answers
+Panel resource: `/v0/resource/plugins/hkdf-meoo/panel`. Every account-facing verb answers
 one shape: `summary` + `accounts` + `config` + `server_time` + `cache_path`.
 
 The full key is **never** echoed: rows carry `id` (sha256 prefix), `key_tail` and

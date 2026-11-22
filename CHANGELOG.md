@@ -1,4 +1,23 @@
-## 2026.11.22.1
+## 2026.11.22.2
+
+**插件 id 改名 `meoo` → `hkdf-meoo`（对外发布 id 方案，2026-11-22 主人裁定）。**
+
+### Changed（id 改名，路由/配置键跟随）
+
+- 官方插件商店 registry 的 id 必须唯一：127 个现存条目里普通形态的名字已有占用先例。
+  自本版起，本作者全部对外 CPA 插件 id 一律 `hkdf-<id>` 前缀；首个即 `hkdf-meoo`。
+- 一次性落位：`providerName` 常量、全部 `/plugins/hkdf-meoo/...` 管理与资源路由、
+  面板 JS 的 `BASE`、`plugins.configs.hkdf-meoo` 配置键、树目录名
+  `cpa-plugins\hkdf-meoo`、go.mod `module xzy/hkdf-meoo`、构建产物
+  `hkdf-meoo-<版本>-cshared.dll`、部署件 `hkdf-meoo-v<版本>.dll`。
+- **保持不动**（它们是上游服务的名字，不是本插件 id）：上游域名 `meoo.com` /
+  `api.meoo.host`、凭据格式 `meoo_ak_*` / `meoo_project_service_v1.*`、插件自管数据
+  目录 `%USERPROFILE%\.meoo-cpa`（迁移有弄丢已登录会话的风险，且不参与 id 契约）。
+- 升级注意：从 2026.11.21.x 及更早版本升级时，宿主配置节的键要从 `meoo:` 改成
+  `hkdf-meoo:`（refresh_minutes 等值原样搬过去）；旧 `meoo-v*.dll` 从部署目录移除
+  后新件才生效（见 RELEASE-ORDER 与 ship 的 deploy-duplicates 判据）。
+
+### 2026.11.22.1
 
 **首次公开发布版（GitHub 公开仓库 + 官方插件商店登记）。**
 
